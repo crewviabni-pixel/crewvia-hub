@@ -174,9 +174,9 @@ function AddLead() {
 
 function Labelled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium">{label}</label>
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-medium">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }
