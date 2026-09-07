@@ -1,24 +1,134 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { Loader2, Lock } from "lucide-react";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
+import { supabase } from "@/integrations/supabase/client";
+
+const USERNAME = "crewviabni";
+const ACCOUNT_EMAIL = "crewviabni@crewvia.app";
+
 export const Route = createFileRoute("/")({
-  component: Index,
+  ssr: false,
+  head: () => ({
+    meta: [
+      { title: "Crewvia BNI CRM — Team Sign In" },
+      {
+        name: "description",
+        content:
+          "Private lead management workspace for the Crewvia BNI team. Sign in to track leads, calls, payments and follow-ups.",
+      },
+      { property: "og:title", content: "Crewvia BNI CRM — Team Sign In" },
+      {
+        property: "og:description",
+        content: "Private lead management workspace for the Crewvia BNI team.",
+      },
+      { name: "robots", content: "noindex" },
+    ],
+  }),
+  component: SignIn,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function SignIn() {
+  const navigate = useNavigate();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) navigate({ to: "/leads", replace: true });
+      else setChecking(false);
+    });
+  }, [navigate]);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (username.trim().toLowerCase() !== USERNAME) {
+      setError("Incorrect username or password.");
+      return;
+    }
+    setBusy(true);
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: ACCOUNT_EMAIL,
+      password,
+    });
+    setBusy(false);
+    if (signInError) {
+      setError("Incorrect username or password.");
+      return;
+    }
+    navigate({ to: "/leads", replace: true });
+  }
+
+  if (checking) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="grid min-h-screen place-items-center bg-primary px-4 py-10">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-7 shadow-xl">
+        <div className="mb-6 flex items-center gap-3">
+          <span className="grid size-11 place-items-center rounded-xl bg-primary font-display text-base font-bold text-primary-foreground">
+            CB
+          </span>
+          <div>
+            <h1 className="font-display text-xl font-bold leading-tight">Crewvia BNI</h1>
+            <p className="text-xs text-muted-foreground">Lead Management CRM</p>
+          </div>
+        </div>
+
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="username" className="mb-1.5 block text-sm font-medium">
+              Username
+            </label>
+            <input
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              placeholder="crewviabni"
+            />
+          </div>
+          <div>
+            <label htmlFor="password" className="mb-1.5 block text-sm font-medium">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              placeholder="••••••••"
+            />
+          </div>
+
+          {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />}
+            Sign in
+          </button>
+        </form>
+
+        <p className="mt-5 text-center text-xs text-muted-foreground">
+          Internal workspace. Access is limited to the Crewvia BNI team account.
+        </p>
+      </div>
     </div>
   );
 }
