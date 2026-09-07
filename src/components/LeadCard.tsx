@@ -1,13 +1,13 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { BellRing, IndianRupee, MessageCircle, Phone, PhoneCall } from "lucide-react";
-import { toast } from "sonner";
 
 import { PaymentPill, StatusPill } from "@/components/crm-ui";
-import { useCrmRefresh } from "@/components/lead-dialogs";
+import { StatusChangeDialog, useCrmRefresh } from "@/components/lead-dialogs";
 import { LEAD_STATUSES, initials, money, telHref, waHref, type Lead, type LeadStatus } from "@/lib/crm";
-import { changeStatus, logWhatsapp } from "@/lib/crm-api";
+import { logWhatsapp } from "@/lib/crm-api";
 
 export function LeadCard({
   lead,
@@ -21,15 +21,7 @@ export function LeadCard({
   onRemind: (lead: Lead) => void;
 }) {
   const refresh = useCrmRefresh();
-
-  const status = useMutation({
-    mutationFn: (next: LeadStatus) => changeStatus(lead, next),
-    onSuccess: () => {
-      refresh();
-      toast.success("Status updated");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  const [statusTarget, setStatusTarget] = useState<LeadStatus | null>(null);
 
   const whatsapp = useMutation({
     mutationFn: () => logWhatsapp(lead),
@@ -72,12 +64,13 @@ export function LeadCard({
             ) : null}
           </div>
         </div>
-        <div className="hidden text-right sm:block">
-          <p className="font-display text-sm font-bold">{money(lead.deal_value)}</p>
+        <div className="hidden text-right sm:block space-y-0.5">
+          <p className="font-display text-sm font-bold">{money(lead.deal_value)} <span className="text-[10px] font-normal text-muted-foreground uppercase tracking-wider ml-1">Total</span></p>
+          <p className="text-xs text-muted-foreground">{money(lead.amount_paid)} <span className="text-[10px] uppercase tracking-wider ml-1">Rcvd</span></p>
           {pending > 0 ? (
-            <p className="text-xs text-muted-foreground">{money(pending)} pending</p>
+            <p className="text-xs font-medium text-amber-600">{money(pending)} <span className="text-[10px] uppercase tracking-wider ml-1">Pend</span></p>
           ) : (
-            <p className="text-xs text-emerald-700">Fully paid</p>
+            <p className="text-xs font-medium text-emerald-600">Fully Paid</p>
           )}
         </div>
       </div>
@@ -130,8 +123,10 @@ export function LeadCard({
         <select
           aria-label="Change status"
           value={lead.status}
-          disabled={status.isPending}
-          onChange={(e) => status.mutate(e.target.value as LeadStatus)}
+          onChange={(e) => {
+            const next = e.target.value as LeadStatus;
+            if (next !== lead.status) setStatusTarget(next);
+          }}
           className="ml-auto rounded-lg border border-input bg-background px-2 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-ring"
         >
           {LEAD_STATUSES.map((s) => (
@@ -141,6 +136,13 @@ export function LeadCard({
           ))}
         </select>
       </div>
+
+      <StatusChangeDialog
+        lead={lead}
+        nextStatus={statusTarget}
+        open={!!statusTarget}
+        onOpenChange={(v) => !v && setStatusTarget(null)}
+      />
     </div>
   );
 }

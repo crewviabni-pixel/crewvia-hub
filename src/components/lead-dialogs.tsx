@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -13,12 +13,18 @@ import {
   CALL_OUTCOMES,
   LEAD_STATUSES,
   PAYMENT_METHODS,
+  STATUS_REMINDER_CONFIG,
   money,
+  statusMeta,
   type CallOutcome,
   type Lead,
   type LeadStatus,
+  type PaymentCategory,
+  type Reminder,
+  NEXT_STATUS_MAP,
+  ACTION_CONFIG,
 } from "@/lib/crm";
-import { createReminder, logCall, recordPayment } from "@/lib/crm-api";
+import { changeStatus, completeReminder, createReminder, logCall, recordPayment, addNote, cancelAllReminders } from "@/lib/crm-api";
 
 export function useCrmRefresh() {
   const queryClient = useQueryClient();
@@ -48,17 +54,19 @@ export function CallOutcomeDialog({
   const [outcome, setOutcome] = useState<CallOutcome>("connected");
   const [note, setNote] = useState("");
   const [nextStatus, setNextStatus] = useState<LeadStatus | "">("");
+  const [reminderAt, setReminderAt] = useState("");
 
   const save = useMutation({
     mutationFn: async () => {
       if (!lead) return;
-      await logCall(lead, outcome, note.trim() || undefined, nextStatus || undefined);
+      await logCall(lead, outcome, note.trim() || undefined, nextStatus || undefined, reminderAt || undefined);
     },
     onSuccess: () => {
       refresh();
       toast.success("Call logged");
       setNote("");
       setNextStatus("");
+      setReminderAt("");
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -70,7 +78,7 @@ export function CallOutcomeDialog({
         <DialogHeader>
           <DialogTitle className="font-display">Log call — {lead?.name}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
             <p className="mb-1.5 text-sm font-medium">Outcome</p>
             <div className="grid grid-cols-2 gap-2">
@@ -106,10 +114,47 @@ export function CallOutcomeDialog({
             </select>
           </div>
           <div>
+            <label className="mb-1.5 block text-sm font-medium">Follow-up Reminder</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => setReminderAt("")}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  reminderAt === "" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"
+                }`}
+              >
+                None
+              </button>
+              {presetDates().map((p) => {
+                const val = p.date.toISOString();
+                return (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => setReminderAt(val)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                      reminderAt === val ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+            <input
+              type="datetime-local"
+              className={fieldClass}
+              value={reminderAt ? toLocalInputValue(new Date(reminderAt)) : ""}
+              onChange={(e) => {
+                if (e.target.value) setReminderAt(new Date(e.target.value).toISOString());
+              }}
+            />
+          </div>
+          <div>
             <label className="mb-1.5 block text-sm font-medium">Note</label>
             <textarea
               className={fieldClass}
-              rows={3}
+              rows={2}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="What was discussed?"
@@ -144,6 +189,7 @@ export function PaymentDialog({
   const refresh = useCrmRefresh();
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("upi");
+  const [category, setCategory] = useState<PaymentCategory>("partial");
   const [note, setNote] = useState("");
 
   const pending = lead ? Number(lead.deal_value) - Number(lead.amount_paid) : 0;
@@ -153,13 +199,14 @@ export function PaymentDialog({
       if (!lead) return;
       const value = Number(amount);
       if (!value || value <= 0) throw new Error("Enter a valid amount");
-      await recordPayment(lead, value, method, note.trim() || undefined);
+      await recordPayment(lead, value, method, category, note.trim() || undefined);
     },
     onSuccess: () => {
       refresh();
       toast.success("Payment recorded");
       setAmount("");
       setNote("");
+      setCategory("partial");
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -171,7 +218,7 @@ export function PaymentDialog({
         <DialogHeader>
           <DialogTitle className="font-display">Record payment — {lead?.name}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Deal {money(lead?.deal_value)} · Paid {money(lead?.amount_paid)} · Pending{" "}
             <span className="font-semibold text-foreground">{money(pending)}</span>
@@ -180,7 +227,7 @@ export function PaymentDialog({
             {pending > 0 ? (
               <button
                 type="button"
-                onClick={() => setAmount(String(pending))}
+                onClick={() => { setAmount(String(pending)); setCategory("full"); }}
                 className="rounded-full border border-border px-3 py-1 text-xs font-medium hover:bg-secondary"
               >
                 Full pending {money(pending)}
@@ -189,22 +236,36 @@ export function PaymentDialog({
             {pending > 0 ? (
               <button
                 type="button"
-                onClick={() => setAmount(String(Math.round(pending / 2)))}
+                onClick={() => { setAmount(String(Math.round(pending / 2))); setCategory("partial"); }}
                 className="rounded-full border border-border px-3 py-1 text-xs font-medium hover:bg-secondary"
               >
                 Half {money(Math.round(pending / 2))}
               </button>
             ) : null}
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Amount</label>
-            <input
-              className={fieldClass}
-              inputMode="numeric"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Amount</label>
+              <input
+                className={fieldClass}
+                inputMode="numeric"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Category</label>
+              <select
+                className={fieldClass}
+                value={category}
+                onChange={(e) => setCategory(e.target.value as PaymentCategory)}
+              >
+                <option value="advance">Advance</option>
+                <option value="partial">Partial</option>
+                <option value="full">Full / Final</option>
+              </select>
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium">Method</label>
@@ -355,6 +416,414 @@ export function ReminderDialog({
             className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
           >
             Set custom reminder
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ----------------------------- status change ------------------------------ */
+
+export function StatusChangeDialog({
+  lead,
+  nextStatus,
+  open,
+  onOpenChange,
+}: {
+  lead: Lead | null;
+  nextStatus: LeadStatus | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const refresh = useCrmRefresh();
+  const [custom, setCustom] = useState("");
+
+  const config = nextStatus ? STATUS_REMINDER_CONFIG[nextStatus] : null;
+
+  const save = useMutation({
+    mutationFn: async (reminderAt?: string) => {
+      if (!lead || !nextStatus) return;
+      await changeStatus(lead, nextStatus, undefined, reminderAt);
+    },
+    onSuccess: () => {
+      refresh();
+      toast.success("Status updated");
+      setCustom("");
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const statusLabel = nextStatus ? statusMeta(nextStatus).label : "";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            Moving to {statusLabel} — {lead?.name}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          {config ? (
+            <>
+              <p className="text-sm font-medium">{config.prompt}</p>
+              <div className="flex flex-wrap gap-2">
+                {presetDates().map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    disabled={save.isPending}
+                    onClick={() => save.mutate(p.date.toISOString())}
+                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:bg-secondary disabled:opacity-60"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Custom date & time</label>
+                <input
+                  type="datetime-local"
+                  className={fieldClass}
+                  value={custom}
+                  onChange={(e) => setCustom(e.target.value)}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Change status to <span className="font-semibold">{statusLabel}</span>?
+            </p>
+          )}
+        </div>
+        <DialogFooter className="flex gap-2 sm:gap-2">
+          {config && custom ? (
+            <button
+              onClick={() => save.mutate(new Date(custom).toISOString())}
+              disabled={save.isPending}
+              className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+            >
+              Set reminder & update
+            </button>
+          ) : null}
+          <button
+            onClick={() => save.mutate(undefined)}
+            disabled={save.isPending}
+            className={`rounded-lg border border-border px-4 py-2.5 text-sm font-semibold hover:bg-secondary disabled:opacity-60 ${
+              config && custom ? "" : "flex-1 bg-primary text-primary-foreground"
+            }`}
+          >
+            {config ? "Skip reminder" : "Confirm"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ----------------------------- smart action ------------------------------ */
+
+export function SmartActionDialog({
+  reminder,
+  lead,
+  open,
+  onOpenChange,
+}: {
+  reminder: Reminder | null;
+  lead: Lead | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const refresh = useCrmRefresh();
+  const [custom, setCustom] = useState("");
+
+  const [negative, setNegative] = useState(false);
+  const [note, setNote] = useState("");
+  const [outcome, setOutcome] = useState<CallOutcome>("connected");
+  const [advance, setAdvance] = useState(true);
+  const [amount, setAmount] = useState<number | "">("");
+  const [method, setMethod] = useState("upi");
+
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [noFollowUp, setNoFollowUp] = useState(false);
+  const [markLost, setMarkLost] = useState(false);
+
+  // Memoize presets so identity and getTime() doesn't drift on re-render while modal is open
+  const presets = useMemo(() => presetDates(), [open]);
+
+  // default amount if missing
+  const defaultAmount = lead ? lead.deal_value - lead.amount_paid : 0;
+  
+  const action = lead ? ACTION_CONFIG[lead.status] : null;
+  const nextStatus = lead ? NEXT_STATUS_MAP[lead.status] : null;
+  const config = nextStatus ? STATUS_REMINDER_CONFIG[nextStatus] : null;
+
+  const save = useMutation({
+    mutationFn: async (reminderAt?: Date) => {
+      if (!reminder || !lead || !action) return;
+      
+      await completeReminder(reminder);
+
+      if (negative) {
+        if (note) await addNote(lead, `Setback/Issue: ${note}`);
+        
+        // Even in a setback, if they entered a specific payment amount on a payment step, record it.
+        if (action.type === "payment" && amount !== "") {
+          await recordPayment(lead, Number(amount), method, action.category || "partial", note || undefined);
+        }
+
+        if (markLost) {
+          await changeStatus(lead, "lost");
+          await cancelAllReminders(lead.id);
+        } else if (reminderAt) {
+          await createReminder({
+            leadId: lead.id,
+            title: reminder.title, // retry same step
+            dueAt: reminderAt.toISOString(),
+          });
+        }
+        return;
+      }
+
+      // Positive flows
+      if (action.type === "call") {
+        const willAdvance = outcome === "connected" && advance;
+        await logCall(
+          lead,
+          outcome,
+          note || undefined,
+          willAdvance && nextStatus ? nextStatus : undefined,
+          reminderAt?.toISOString()
+        );
+      } else if (action.type === "payment") {
+        const finalAmount = amount === "" ? defaultAmount : Number(amount);
+        await recordPayment(lead, finalAmount, method, action.category || "partial", note || undefined);
+        if (nextStatus) {
+          await changeStatus(lead, nextStatus, undefined, reminderAt?.toISOString());
+        } else if (reminderAt) {
+          await createReminder({ leadId: lead.id, title: `Follow up with ${lead.name}`, dueAt: reminderAt.toISOString() });
+        }
+      } else if (action.type === "send") {
+        if (nextStatus) {
+          await changeStatus(lead, nextStatus, undefined, reminderAt?.toISOString());
+        }
+      } else {
+        if (nextStatus) {
+          await changeStatus(lead, nextStatus, undefined, reminderAt?.toISOString());
+        } else if (reminderAt) {
+          await createReminder({ leadId: lead.id, title: `Follow up with ${lead.name}`, dueAt: reminderAt.toISOString() });
+        }
+      }
+    },
+    onSuccess: () => {
+      refresh();
+      toast.success("Task completed");
+      setCustom("");
+      setNegative(false);
+      setNote("");
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => {
+      if (!v) {
+        setNegative(false);
+        setNote("");
+        setSelectedDate(null);
+        setNoFollowUp(false);
+        setMarkLost(false);
+        setCustom("");
+      }
+      onOpenChange(v);
+    }}>
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            {negative ? "Report Setback / Issue" : action?.label || "Complete Task"}
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+            <p className="text-sm font-semibold text-emerald-900">
+              Completing: <span className="font-normal">{reminder?.title}</span>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="neg"
+              checked={negative}
+              onChange={(e) => {
+                setNegative(e.target.checked);
+                if (!e.target.checked) setMarkLost(false);
+              }}
+              className="rounded border-border text-destructive focus:ring-destructive size-4"
+            />
+            <label htmlFor="neg" className="text-sm font-semibold text-destructive">
+              Didn't go as planned / Report an issue
+            </label>
+          </div>
+
+          {!negative && action?.type === "call" && (
+            <div className="space-y-3 rounded-lg border border-border p-3 bg-sidebar">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Call outcome</label>
+                <select
+                  value={outcome}
+                  onChange={(e) => setOutcome(e.target.value as CallOutcome)}
+                  className={fieldClass}
+                >
+                  {CALL_OUTCOMES.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              {outcome === "connected" && nextStatus && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="adv"
+                    checked={advance}
+                    onChange={(e) => setAdvance(e.target.checked)}
+                    className="rounded border-border text-primary focus:ring-primary size-4"
+                  />
+                  <label htmlFor="adv" className="text-sm font-medium">
+                    Advance to <span className="font-bold">{statusMeta(nextStatus).label}</span>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!negative && action?.type === "payment" && (
+            <div className="space-y-3 rounded-lg border border-border p-3 bg-sidebar">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Amount received</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-sm text-muted-foreground">₹</span>
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(Number(e.target.value) || "")}
+                    placeholder={(lead ? (lead.deal_value - lead.amount_paid) : 0).toString()}
+                    className={`${fieldClass} pl-7`}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Payment method</label>
+                <select
+                  value={method}
+                  onChange={(e) => setMethod(e.target.value)}
+                  className={fieldClass}
+                >
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>{m.toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {(negative || action?.type === "call" || action?.type === "payment") && (
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                {negative ? "Reason / Notes (Required)" : "Notes (Optional)"}
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className={fieldClass}
+                rows={2}
+                placeholder={negative ? "e.g. They asked to call back next week..." : "Add any details here..."}
+              />
+            </div>
+          )}
+
+          <div className="space-y-3 border-t border-border pt-4">
+            <p className="text-sm font-medium">
+              {negative
+                ? "When should we retry this?"
+                : (advance && nextStatus && config)
+                ? `Next: ${statusMeta(nextStatus).label}. ${config.prompt}`
+                : "When should we follow up?"}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {negative && (
+                <button
+                  type="button"
+                  onClick={() => { setMarkLost(true); setNoFollowUp(false); setSelectedDate(null); setCustom(""); }}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                    markLost
+                      ? "border-destructive bg-destructive text-destructive-foreground"
+                      : "border-border hover:bg-secondary text-destructive"
+                  }`}
+                >
+                  Mark as Lost
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => { setNoFollowUp(true); setMarkLost(false); setSelectedDate(null); setCustom(""); }}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                  noFollowUp
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border hover:bg-secondary"
+                }`}
+              >
+                No follow-up needed
+              </button>
+              {presets.map((p) => {
+                const isActive = selectedDate?.getTime() === p.date.getTime();
+                return (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => { setSelectedDate(p.date); setNoFollowUp(false); setMarkLost(false); setCustom(""); }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                      isActive
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border hover:bg-secondary"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="pt-2">
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Custom date & time</label>
+            <input
+              type="datetime-local"
+              className={fieldClass}
+              value={custom}
+              onChange={(e) => {
+                setCustom(e.target.value);
+                setSelectedDate(e.target.value ? new Date(e.target.value) : null);
+                setNoFollowUp(false);
+                setMarkLost(false);
+              }}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <button
+            onClick={() => save.mutate(selectedDate || undefined)}
+            disabled={
+              save.isPending ||
+              (negative ? !note.trim() : (!selectedDate && !noFollowUp && !markLost))
+            }
+            className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+          >
+            Save & Complete Task
           </button>
         </DialogFooter>
       </DialogContent>

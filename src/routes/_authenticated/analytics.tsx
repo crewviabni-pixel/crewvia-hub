@@ -19,7 +19,7 @@ import {
 } from "recharts";
 
 import { AppShell } from "@/components/AppShell";
-import { StatCard } from "@/components/crm-ui";
+import { ChartSkeleton, StatCard, StatCardSkeleton } from "@/components/crm-ui";
 import { LEAD_STATUSES, money, statusMeta } from "@/lib/crm";
 import { fetchActivities, fetchLeads, fetchPayments, fetchReminders } from "@/lib/crm-api";
 
@@ -57,13 +57,16 @@ const CHART_COLORS = [
 function Analytics() {
   const [days, setDays] = useState(30);
 
-  const { data: leads = [] } = useQuery({ queryKey: ["leads"], queryFn: fetchLeads });
-  const { data: payments = [] } = useQuery({ queryKey: ["payments"], queryFn: () => fetchPayments() });
-  const { data: activities = [] } = useQuery({
-    queryKey: ["activities"],
-    queryFn: () => fetchActivities(),
-  });
-  const { data: reminders = [] } = useQuery({ queryKey: ["reminders"], queryFn: fetchReminders });
+  const lq = useQuery({ queryKey: ["leads"], queryFn: fetchLeads });
+  const aq = useQuery({ queryKey: ["activities"], queryFn: fetchActivities });
+  const pq = useQuery({ queryKey: ["payments"], queryFn: fetchPayments });
+  const rq = useQuery({ queryKey: ["reminders"], queryFn: fetchReminders });
+
+  const isLoading = lq.isLoading || aq.isLoading || pq.isLoading || rq.isLoading;
+  const leads = lq.data || [];
+  const activities = aq.data || [];
+  const payments = pq.data || [];
+  const reminders = rq.data || [];
 
   const since = days ? subDays(new Date(), days) : new Date(0);
 
@@ -78,10 +81,14 @@ function Analytics() {
 
   const converted = scopedLeads.filter((l) => l.status === "converted").length;
   const lost = scopedLeads.filter((l) => l.status === "lost").length;
-  const pipelineValue = scopedLeads.reduce((s, l) => s + Number(l.deal_value), 0);
+  const pipelineValue = scopedLeads.reduce((s, l) => (l.status === "lost" ? s : s + Number(l.deal_value)), 0);
   const collected = scopedPayments.reduce((s, p) => s + Number(p.amount), 0);
   const outstanding = leads.reduce(
-    (s, l) => s + Math.max(Number(l.deal_value) - Number(l.amount_paid), 0),
+    (s, l) => (l.status === "lost" ? s : s + Math.max(Number(l.deal_value) - Number(l.amount_paid), 0)),
+    0,
+  );
+  const lossValue = scopedLeads.reduce(
+    (s, l) => (l.status === "lost" ? s + Math.max(Number(l.deal_value) - Number(l.amount_paid), 0) : s),
     0,
   );
   const conversionRate = scopedLeads.length ? (converted / scopedLeads.length) * 100 : 0;
@@ -150,23 +157,39 @@ function Analytics() {
         </select>
       }
     >
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Leads" value={String(scopedLeads.length)} hint={`${leads.length} all time`} />
-        <StatCard
-          label="Converted"
-          value={String(converted)}
-          hint={`${conversionRate.toFixed(1)}% conversion`}
-          accent
-        />
-        <StatCard label="Collected" value={money(collected)} hint={`${scopedPayments.length} payments`} />
-        <StatCard label="Outstanding" value={money(outstanding)} hint="Across all leads" />
-        <StatCard label="Pipeline value" value={money(pipelineValue)} />
-        <StatCard label="Calls logged" value={String(callsInRange)} />
-        <StatCard label="Avg deal size" value={money(avgDeal)} />
-        <StatCard label="Overdue reminders" value={String(overdue)} hint={`${lost} leads lost`} />
-      </div>
+      {isLoading ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <StatCardSkeleton key={i} />
+            ))}
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <ChartSkeleton />
+            <ChartSkeleton />
+            <ChartSkeleton />
+            <ChartSkeleton />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard label="Leads" value={String(scopedLeads.length)} hint={`${leads.length} all time`} />
+            <StatCard
+              label="Converted"
+              value={String(converted)}
+              hint={`${conversionRate.toFixed(1)}% conversion`}
+              accent
+            />
+            <StatCard label="Collected" value={money(collected)} hint={`${scopedPayments.length} payments`} />
+            <StatCard label="Outstanding" value={money(outstanding)} hint="Active leads only" />
+            <StatCard label="Pipeline value" value={money(pipelineValue)} hint={`${money(lossValue)} lost out of pipeline`} />
+            <StatCard label="Calls logged" value={String(callsInRange)} />
+            <StatCard label="Avg deal size" value={money(avgDeal)} />
+            <StatCard label="Overdue reminders" value={String(overdue)} hint={`${lost} leads lost`} />
+          </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <Panel title="Leads & calls per day">
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={trend}>
@@ -262,8 +285,10 @@ function Analytics() {
               </div>
             );
           })}
-        </div>
-      </Panel>
+          </div>
+        </Panel>
+      </>
+      )}
     </AppShell>
   );
 }

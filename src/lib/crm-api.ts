@@ -6,9 +6,10 @@ import type {
   Lead,
   LeadStatus,
   Payment,
+  PaymentCategory,
   Reminder,
 } from "@/lib/crm";
-import { statusMeta } from "@/lib/crm";
+import { statusMeta, STATUS_REMINDER_CONFIG } from "@/lib/crm";
 
 /* ---------------------------------- reads --------------------------------- */
 
@@ -29,7 +30,7 @@ export async function fetchLead(id: string): Promise<Lead> {
 
 export async function fetchActivities(leadId?: string): Promise<Activity[]> {
   let q = supabase.from("activities").select("*").order("created_at", { ascending: false });
-  if (leadId) q = q.eq("lead_id", leadId);
+  if (typeof leadId === "string") q = q.eq("lead_id", leadId);
   else q = q.limit(300);
   const { data, error } = await q;
   if (error) throw error;
@@ -47,7 +48,7 @@ export async function fetchReminders(): Promise<Reminder[]> {
 
 export async function fetchPayments(leadId?: string): Promise<Payment[]> {
   let q = supabase.from("payments").select("*").order("paid_at", { ascending: false });
-  if (leadId) q = q.eq("lead_id", leadId);
+  if (typeof leadId === "string") q = q.eq("lead_id", leadId);
   const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
@@ -140,7 +141,17 @@ export async function updateLeadFields(
   });
 }
 
-export async function changeStatus(lead: Lead, next: LeadStatus, note?: string) {
+export async function deleteLead(leadId: string) {
+  const { error } = await supabase.from("leads").delete().eq("id", leadId);
+  if (error) throw error;
+}
+
+export async function changeStatus(
+  lead: Lead,
+  next: LeadStatus,
+  note?: string,
+  reminderAt?: string,
+) {
   if (lead.status === next) return;
   const patch: Partial<Lead> = { status: next };
   if (next === "converted") patch.converted_at = new Date().toISOString();
@@ -154,6 +165,18 @@ export async function changeStatus(lead: Lead, next: LeadStatus, note?: string) 
     detail: note ?? null,
     meta: { from: lead.status, to: next },
   });
+
+  // Auto-create reminder if a time was picked for this status
+  if (reminderAt) {
+    const config = STATUS_REMINDER_CONFIG[next];
+    if (config) {
+      await createReminder({
+        leadId: lead.id,
+        title: config.titleTemplate.replace("{name}", lead.name),
+        dueAt: reminderAt,
+      });
+    }
+  }
 }
 
 export async function logCall(
@@ -161,6 +184,7 @@ export async function logCall(
   outcome: CallOutcome,
   note?: string,
   nextStatus?: LeadStatus,
+  reminderAt?: string
 ) {
   const now = new Date().toISOString();
   const patch: Partial<Lead> = {
@@ -172,8 +196,6 @@ export async function logCall(
   if (nextStatus && nextStatus !== lead.status) {
     patch.status = nextStatus;
     if (nextStatus === "converted") patch.converted_at = now;
-  } else if (lead.status === "new" && outcome === "connected") {
-    patch.status = "contacted";
   }
 
   const { error } = await supabase.from("leads").update(patch).eq("id", lead.id);
@@ -196,22 +218,37 @@ export async function logCall(
       meta: { from: lead.status, to: patch.status },
     });
   }
+
+  if (reminderAt) {
+    await createReminder({
+      leadId: lead.id,
+      title: `Follow up with ${lead.name}`,
+      dueAt: reminderAt,
+    });
+  }
 }
 
-export async function recordPayment(lead: Lead, amount: number, method: string, note?: string) {
+export async function recordPayment(
+  lead: Lead, 
+  amount: number, 
+  method: string, 
+  category: PaymentCategory,
+  note?: string
+) {
   const { error } = await supabase.from("payments").insert({
     lead_id: lead.id,
     amount,
     method,
+    category,
     note: note ?? null,
   });
   if (error) throw error;
   await logActivity({
     leadId: lead.id,
     kind: "payment",
-    summary: `Payment received via ${method}`,
+    summary: `${category} payment received via ${method}`,
     detail: note ?? null,
-    meta: { amount, method },
+    meta: { amount, method, category },
   });
 }
 
@@ -301,6 +338,16 @@ export async function cancelReminder(reminder: Reminder) {
     kind: "reminder_snoozed",
     summary: `Reminder cancelled — ${reminder.title}`,
   });
+}
+
+export async function cancelAllReminders(leadId: string) {
+  const { error } = await supabase
+    .from("reminders")
+    .update({ state: "cancelled" })
+    .eq("lead_id", leadId)
+    .eq("state", "pending");
+  if (error) throw error;
+  await syncNextReminder(leadId);
 }
 
 /** Keeps leads.next_reminder_at aligned with the earliest open reminder. */

@@ -142,6 +142,7 @@ export type Database = {
           method: string
           note: string | null
           paid_at: string
+          category: Database["public"]["Enums"]["payment_category"] | null
         }
         Insert: {
           amount: number
@@ -151,6 +152,7 @@ export type Database = {
           method?: string
           note?: string | null
           paid_at?: string
+          category?: Database["public"]["Enums"]["payment_category"] | null
         }
         Update: {
           amount?: number
@@ -160,6 +162,7 @@ export type Database = {
           method?: string
           note?: string | null
           paid_at?: string
+          category?: Database["public"]["Enums"]["payment_category"] | null
         }
         Relationships: [
           {
@@ -234,6 +237,7 @@ export type Database = {
         | "reminder_snoozed"
         | "field_update"
         | "whatsapp"
+      payment_category: "advance" | "partial" | "full"
       call_outcome:
         | "connected"
         | "no_answer"
@@ -242,11 +246,11 @@ export type Database = {
         | "switched_off"
         | "callback_later"
       lead_status:
-        | "new"
-        | "contacted"
-        | "interested"
-        | "follow_up"
-        | "negotiation"
+        | "info_taken"
+        | "draft_sent"
+        | "approved"
+        | "advance_received"
+        | "presentation_sent"
         | "converted"
         | "lost"
       payment_status: "unpaid" | "partial" | "paid"
@@ -399,11 +403,11 @@ export const Constants = {
         "callback_later",
       ],
       lead_status: [
-        "new",
-        "contacted",
-        "interested",
-        "follow_up",
-        "negotiation",
+        "info_taken",
+        "draft_sent",
+        "approved",
+        "advance_received",
+        "presentation_sent",
         "converted",
         "lost",
       ],

@@ -31,17 +31,23 @@ function AddLead() {
   const navigate = useNavigate();
   const refresh = useCrmRefresh();
 
-  const [form, setForm] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    company: "",
-    city: "",
-    source: "BNI",
-    service: "",
-    status: "new" as LeadStatus,
-    deal_value: "",
-    notes: "",
+  const [form, setForm] = useState(() => {
+    let defaultPrice = "";
+    if (typeof window !== "undefined") {
+      defaultPrice = localStorage.getItem("crewvia_default_price") || "";
+    }
+    return {
+      name: "",
+      phone: "",
+      email: "",
+      company: "",
+      city: "",
+      source: "BNI",
+      service: "",
+      status: "info_taken" as LeadStatus,
+      deal_value: defaultPrice,
+      notes: "",
+    };
   });
   const [reminderAt, setReminderAt] = useState("");
 

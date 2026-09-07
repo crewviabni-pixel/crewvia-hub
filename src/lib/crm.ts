@@ -7,18 +7,65 @@ export type Payment = Database["public"]["Tables"]["payments"]["Row"];
 
 export type LeadStatus = Database["public"]["Enums"]["lead_status"];
 export type PaymentStatus = Database["public"]["Enums"]["payment_status"];
+export type PaymentCategory = Database["public"]["Enums"]["payment_category"];
 export type CallOutcome = Database["public"]["Enums"]["call_outcome"];
 export type ActivityKind = Database["public"]["Enums"]["activity_kind"];
 
 export const LEAD_STATUSES: { value: LeadStatus; label: string; tone: string }[] = [
-  { value: "new", label: "New", tone: "bg-sky-100 text-sky-900 border-sky-300" },
-  { value: "contacted", label: "Contacted", tone: "bg-indigo-100 text-indigo-900 border-indigo-300" },
-  { value: "interested", label: "Interested", tone: "bg-amber-100 text-amber-900 border-amber-300" },
-  { value: "follow_up", label: "Follow-up", tone: "bg-orange-100 text-orange-900 border-orange-300" },
-  { value: "negotiation", label: "Negotiation", tone: "bg-violet-100 text-violet-900 border-violet-300" },
+  { value: "info_taken", label: "Info Taken", tone: "bg-sky-100 text-sky-900 border-sky-300" },
+  { value: "draft_sent", label: "Draft Sent", tone: "bg-indigo-100 text-indigo-900 border-indigo-300" },
+  { value: "approved", label: "Approved", tone: "bg-amber-100 text-amber-900 border-amber-300" },
+  { value: "advance_received", label: "Advance Rec.", tone: "bg-orange-100 text-orange-900 border-orange-300" },
+  { value: "presentation_sent", label: "Presentation Sent", tone: "bg-violet-100 text-violet-900 border-violet-300" },
   { value: "converted", label: "Converted", tone: "bg-emerald-100 text-emerald-900 border-emerald-300" },
   { value: "lost", label: "Lost", tone: "bg-rose-100 text-rose-900 border-rose-300" },
 ];
+
+/** Config for auto-reminder on status change. Terminal statuses (converted/lost) have no config. */
+export const STATUS_REMINDER_CONFIG: Partial<
+  Record<LeadStatus, { prompt: string; titleTemplate: string }>
+> = {
+  info_taken: {
+    prompt: "When should you send the draft?",
+    titleTemplate: "Send draft to {name}",
+  },
+  draft_sent: {
+    prompt: "When should you follow up?",
+    titleTemplate: "Follow up with {name}",
+  },
+  approved: {
+    prompt: "When should you collect the advance?",
+    titleTemplate: "Collect advance from {name}",
+  },
+  advance_received: {
+    prompt: "When should you send the presentation?",
+    titleTemplate: "Send presentation to {name}",
+  },
+  presentation_sent: {
+    prompt: "When should you collect payment?",
+    titleTemplate: "Collect payment from {name}",
+  },
+};
+
+export const NEXT_STATUS_MAP: Partial<Record<LeadStatus, LeadStatus>> = {
+  info_taken: "draft_sent",
+  draft_sent: "approved",
+  approved: "advance_received",
+  advance_received: "presentation_sent",
+  presentation_sent: "converted",
+};
+
+export type SmartActionType = "send" | "call" | "payment" | "generic";
+
+export const ACTION_CONFIG: Record<LeadStatus, { type: SmartActionType; label: string; category?: PaymentCategory }> = {
+  info_taken: { type: "send", label: "Send Draft" },
+  draft_sent: { type: "call", label: "Log Call" },
+  approved: { type: "payment", label: "Record Advance", category: "advance" },
+  advance_received: { type: "send", label: "Send Presentation" },
+  presentation_sent: { type: "payment", label: "Record Final", category: "full" },
+  converted: { type: "generic", label: "Done" },
+  lost: { type: "generic", label: "Done" },
+};
 
 export const PAYMENT_STATUSES: { value: PaymentStatus; label: string; tone: string }[] = [
   { value: "unpaid", label: "Unpaid", tone: "bg-rose-100 text-rose-900 border-rose-300" },

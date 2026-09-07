@@ -1,14 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { format, isToday } from "date-fns";
-import { Check, Clock, MessageCircle, Phone } from "lucide-react";
+import { Check, Clock, MessageCircle, Phone, Send, PhoneCall, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/AppShell";
-import { EmptyState, StatCard } from "@/components/crm-ui";
-import { useCrmRefresh } from "@/components/lead-dialogs";
-import { ACTIVITY_LABEL, telHref, waHref, type Lead, type Reminder } from "@/lib/crm";
+import { EmptyState, StatCard, StatCardSkeleton, StatusPill } from "@/components/crm-ui";
+import { useCrmRefresh, SmartActionDialog } from "@/components/lead-dialogs";
+import { ACTIVITY_LABEL, telHref, waHref, ACTION_CONFIG, type Lead, type Reminder, type LeadStatus } from "@/lib/crm";
 import {
   completeReminder,
   fetchActivities,
@@ -53,30 +53,35 @@ function bucketOf(due: Date): Column {
 
 function RemindersPage() {
   const refresh = useCrmRefresh();
-  const { data: reminders = [] } = useQuery({ queryKey: ["reminders"], queryFn: fetchReminders });
-  const { data: leads = [] } = useQuery({ queryKey: ["leads"], queryFn: fetchLeads });
-  const { data: activities = [] } = useQuery({
-    queryKey: ["activities"],
-    queryFn: () => fetchActivities(),
-  });
+  const lq = useQuery({ queryKey: ["leads"], queryFn: fetchLeads });
+  const aq = useQuery({ queryKey: ["activities"], queryFn: () => fetchActivities() });
+  const rq = useQuery({ queryKey: ["reminders"], queryFn: fetchReminders });
 
-  const leadMap = useMemo(() => new Map(leads.map((l) => [l.id, l])), [leads]);
+  const isLoading = lq.isLoading || aq.isLoading || rq.isLoading;
+  const reminders = rq.data || [];
+  const leads = lq.data || [];
+  const activities = aq.data || [];
 
   const done = useMutation({
     mutationFn: (r: Reminder) => completeReminder(r),
     onSuccess: () => {
       refresh();
-      toast.success("Reminder completed");
+      toast.success("Completed");
     },
   });
   const snooze = useMutation({
-    mutationFn: ({ r, hours }: { r: Reminder; hours: number }) =>
-      snoozeReminder(r, new Date(Date.now() + hours * 3600_000).toISOString()),
+    mutationFn: (p: { r: Reminder; hours: number }) => {
+      const due = new Date(p.r.due_at);
+      due.setHours(due.getHours() + p.hours);
+      return snoozeReminder(p.r, due.toISOString());
+    },
     onSuccess: () => {
       refresh();
-      toast.success("Reminder moved");
+      toast.success("Snoozed");
     },
   });
+
+  const leadMap = useMemo(() => new Map(leads.map((l) => [l.id, l])), [leads]);
 
   const pending = reminders.filter((r) => r.state === "pending");
   const buckets = COLUMNS.map((col) => ({
@@ -91,49 +96,67 @@ function RemindersPage() {
   ).length;
   const leadsToday = leads.filter((l) => isToday(new Date(l.created_at))).length;
 
+  const [activeTab, setActiveTab] = useState<Column>("Today");
+  const [completing, setCompleting] = useState<{r: Reminder, lead: Lead | undefined} | null>(null);
+
   return (
     <AppShell
       title="Quick reminders & daily activity"
       subtitle="Work the board left to right — overdue first."
     >
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Overdue" value={String(buckets[0]!.items.length)} accent />
-        <StatCard label="Due today" value={String(buckets[1]!.items.length)} />
-        <StatCard label="Calls today" value={String(callsToday)} />
-        <StatCard label="Completed today" value={String(doneToday)} hint={`${leadsToday} new leads`} />
-      </div>
+      {isLoading ? (
+        <>
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </div>
+          <div className="mb-8 space-y-4">
+            <div className="h-10 w-full rounded-xl bg-card border border-border animate-pulse" />
+            <div className="h-48 w-full rounded-xl bg-card border border-border animate-pulse" />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard label="Overdue" value={String(buckets.find(b => b.col === "Overdue")?.items.length || 0)} accent />
+            <StatCard label="Due today" value={String(buckets.find(b => b.col === "Today")?.items.length || 0)} />
+            <StatCard label="Calls today" value={String(callsToday)} />
+            <StatCard label="Completed today" value={String(doneToday)} hint={`${leadsToday} new leads`} />
+          </div>
 
-      <div className="-mx-4 mb-8 overflow-x-auto px-4 pb-2">
-        <div className="flex min-w-max gap-3">
-          {buckets.map(({ col, items }) => (
-            <section key={col} className="w-72 shrink-0 rounded-xl border border-border bg-sidebar p-3">
-              <header className="mb-2 flex items-center justify-between">
-                <h2 className="font-display text-sm font-bold">{col}</h2>
-                <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-semibold">
-                  {items.length}
-                </span>
-              </header>
-              <div className="space-y-2">
-                {items.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
-                    Nothing here
-                  </p>
-                ) : (
-                  items.map((r) => (
-                    <ReminderCard
-                      key={r.id}
-                      reminder={r}
-                      lead={leadMap.get(r.lead_id)}
-                      onDone={() => done.mutate(r)}
-                      onSnooze={(hours) => snooze.mutate({ r, hours })}
-                    />
-                  ))
-                )}
-              </div>
-            </section>
-          ))}
-        </div>
-      </div>
+          <div className="mb-8">
+            <div className="mb-6 flex overflow-x-auto rounded-xl bg-secondary/50 p-1">
+              {COLUMNS.map((col) => {
+                const count = buckets.find((b) => b.col === col)?.items.length || 0;
+                return (
+                  <button
+                    key={col}
+                    onClick={() => setActiveTab(col)}
+                    className={`flex-1 min-w-[100px] whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      activeTab === col
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                    }`}
+                  >
+                    {col} <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-xs opacity-80">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="rounded-xl border border-border bg-card/50 p-4 sm:p-6">
+              <TimelineView
+                items={buckets.find((b) => b.col === activeTab)?.items || []}
+                leadMap={leadMap}
+                onDone={(r, lead) => setCompleting({ r, lead })}
+                snooze={snooze}
+              />
+            </div>
+          </div>
+        </>
+      )}
 
       <h2 className="mb-3 font-display text-xl font-bold">Today's activity</h2>
       {todayActivities.length === 0 ? (
@@ -168,8 +191,84 @@ function RemindersPage() {
           })}
         </ol>
       )}
+
+      {completing && (
+        <SmartActionDialog
+          open={!!completing}
+          onOpenChange={(v) => !v && setCompleting(null)}
+          reminder={completing.r}
+          lead={completing.lead ?? null}
+        />
+      )}
     </AppShell>
   );
+}
+
+function TimelineView({
+  items,
+  leadMap,
+  onDone,
+  snooze,
+}: {
+  items: Reminder[];
+  leadMap: Map<string, Lead>;
+  onDone: (r: Reminder, lead?: Lead) => void;
+  snooze: any;
+}) {
+  if (items.length === 0) {
+    return <EmptyState title="All clear" body="No reminders for this time period." />;
+  }
+
+  // Sort by time ascending
+  const sorted = [...items].sort(
+    (a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime()
+  );
+
+  return (
+    <div className="relative border-l-2 border-border/60 ml-12 sm:ml-16 py-4 space-y-6">
+      {sorted.map((r) => {
+        const time = format(new Date(r.due_at), "h a");
+        const lead = leadMap.get(r.lead_id);
+        return (
+          <div key={r.id} className="relative pl-6 sm:pl-8">
+            <div className="absolute -left-[5px] top-6 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
+            <div className="absolute -left-16 sm:-left-20 top-5 w-12 sm:w-16 text-right">
+              <span className="text-[11px] sm:text-xs font-bold text-muted-foreground uppercase tracking-tight">
+                {time}
+              </span>
+            </div>
+            <ReminderCard
+              reminder={r}
+              lead={lead}
+              onDone={() => onDone(r, lead)}
+              onSnooze={(hours) => snooze.mutate({ r: r, hours })}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function getReminderContext(status?: LeadStatus) {
+  switch (status) {
+    case "info_taken":
+      return "Action: Send draft or presentation to move forward.";
+    case "draft_sent":
+      return "Action: Check for draft feedback or approval.";
+    case "approved":
+      return "Action: Draft approved! Request advance payment.";
+    case "advance_received":
+      return "Action: Advance received. Send presentation or finalize deal.";
+    case "presentation_sent":
+      return "Action: Follow up on presentation. Push for conversion.";
+    case "converted":
+      return "Action: Lead is converted. Ensure deliverables are met.";
+    case "lost":
+      return "Lead is lost. Review if worth reviving.";
+    default:
+      return "Follow up needed.";
+  }
 }
 
 function ReminderCard({
@@ -184,57 +283,81 @@ function ReminderCard({
   onSnooze: (hours: number) => void;
 }) {
   return (
-    <article className="rounded-lg border border-border bg-card p-3">
-      <p className="text-sm font-semibold">{reminder.title}</p>
-      {lead ? (
-        <Link
-          to="/leads/$leadId"
-          params={{ leadId: lead.id }}
-          className="text-xs text-muted-foreground hover:underline"
-        >
-          {lead.name} · {lead.phone}
-        </Link>
-      ) : null}
-      <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-        {format(new Date(reminder.due_at), "d MMM, h:mm a")}
-      </p>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        <button
-          onClick={onDone}
-          className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-primary-foreground"
-        >
-          <Check className="size-3" /> Done
-        </button>
-        <button
-          onClick={() => onSnooze(2)}
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-semibold hover:bg-secondary"
-        >
-          <Clock className="size-3" /> +2h
-        </button>
-        <button
-          onClick={() => onSnooze(24)}
-          className="rounded-md border border-border px-2.5 py-1.5 text-[11px] font-semibold hover:bg-secondary"
-        >
-          +1d
-        </button>
-        {lead ? (
-          <>
-            <a
-              href={telHref(lead.phone)}
-              className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-semibold hover:bg-secondary"
-            >
-              <Phone className="size-3" /> Call
-            </a>
-            <a
-              href={waHref(lead.phone, `Hi ${lead.name.split(" ")[0]}, this is Crewvia BNI.`)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-900"
-            >
-              <MessageCircle className="size-3" /> WA
-            </a>
-          </>
-        ) : null}
+    <article className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <p className="font-display text-base font-semibold text-foreground">{reminder.title}</p>
+          {lead ? (
+            <div className="mt-1 flex items-center gap-2">
+              <Link
+                to="/leads/$leadId"
+                params={{ leadId: lead.id }}
+                className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
+              >
+                {lead.name} · {lead.phone}
+              </Link>
+            </div>
+          ) : null}
+        </div>
+        {lead?.status && <StatusPill status={lead.status} />}
+      </div>
+      
+      <div className="mb-4 rounded-lg bg-secondary/50 p-2.5 text-sm text-secondary-foreground border border-secondary/20">
+        <p className="font-medium">{getReminderContext(lead?.status)}</p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+          {format(new Date(reminder.due_at), "h:mm a")}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {(() => {
+            const action = lead ? ACTION_CONFIG[lead.status] : null;
+            let Icon = Check;
+            if (action?.type === "send") Icon = Send;
+            if (action?.type === "call") Icon = PhoneCall;
+            if (action?.type === "payment") Icon = IndianRupee;
+
+            return (
+              <button
+                onClick={onDone}
+                className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
+              >
+                <Icon className="size-3.5" /> {action?.label || "Done"}
+              </button>
+            );
+          })()}
+          <button
+            onClick={() => onSnooze(2)}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-secondary"
+          >
+            <Clock className="size-3.5" /> +2h
+          </button>
+          <button
+            onClick={() => onSnooze(24)}
+            className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-secondary"
+          >
+            +1d
+          </button>
+          {lead ? (
+            <>
+              <a
+                href={telHref(lead.phone)}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-secondary"
+              >
+                <Phone className="size-3.5" /> Call
+              </a>
+              <a
+                href={waHref(lead.phone, `Hi ${lead.name.split(" ")[0]}, this is Crewvia BNI.`)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition-colors hover:bg-emerald-100"
+              >
+                <MessageCircle className="size-3.5" /> WA
+              </a>
+            </>
+          ) : null}
+        </div>
       </div>
     </article>
   );

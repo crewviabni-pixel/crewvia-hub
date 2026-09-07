@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, BellRing, LogOut, Plus, Users } from "lucide-react";
+import { BarChart3, BellRing, LogOut, Plus, Settings, Users } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { requestNotificationPermission } from "@/lib/firebase";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 
 const NAV = [
   { to: "/leads", label: "Leads", icon: Users },
@@ -39,9 +43,9 @@ export function AppShell({
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <Link to="/leads" className="flex items-center gap-2">
-            <span className="grid size-9 place-items-center rounded-lg bg-primary font-display text-sm font-bold text-primary-foreground">
-              CB
-            </span>
+            <div className="grid size-8 place-items-center">
+              <img src="/logo.png" alt="Crewvia Logo" className="size-full object-contain" />
+            </div>
             <span className="hidden font-display text-sm font-semibold sm:block">Crewvia BNI</span>
           </Link>
 
@@ -60,6 +64,7 @@ export function AppShell({
 
           <div className="ml-auto flex items-center gap-2">
             {actions}
+            <SettingsDialog />
             <button
               onClick={signOut}
               className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
@@ -95,5 +100,86 @@ export function AppShell({
         ))}
       </nav>
     </div>
+  );
+}
+
+function SettingsDialog() {
+  const [pushEnabled, setPushEnabled] = useState(
+    typeof window !== "undefined" && Notification.permission === "granted"
+  );
+  const [loading, setLoading] = useState(false);
+  const [defaultPrice, setDefaultPrice] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("crewvia_default_price") || "10000";
+    }
+    return "10000";
+  });
+
+  const togglePush = async (enabled: boolean) => {
+    if (!enabled) {
+      setPushEnabled(false);
+      return;
+    }
+    setLoading(true);
+    const token = await requestNotificationPermission();
+    if (token) {
+      setPushEnabled(true);
+    } else {
+      setPushEnabled(false);
+    }
+    setLoading(false);
+  };
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setDefaultPrice(val);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("crewvia_default_price", val);
+    }
+  };
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button className="inline-flex items-center justify-center rounded-md border border-border bg-card px-2.5 py-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
+          <Settings className="size-4" />
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="font-display">Settings</DialogTitle>
+        </DialogHeader>
+        <div className="py-4 space-y-4">
+          <div className="flex items-center justify-between rounded-lg border border-border p-4 shadow-sm">
+            <div className="space-y-0.5">
+              <label className="text-sm font-medium">Push Notifications</label>
+              <p className="text-xs text-muted-foreground">Receive background reminder alerts</p>
+            </div>
+            <Switch
+              checked={pushEnabled}
+              onCheckedChange={togglePush}
+              disabled={loading}
+            />
+          </div>
+          
+          <div className="rounded-lg border border-border p-4 shadow-sm space-y-3">
+            <div className="space-y-0.5">
+              <label className="text-sm font-medium">Default Product Price</label>
+              <p className="text-xs text-muted-foreground">Used as the default Deal Value for new leads</p>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
+              <input
+                type="number"
+                value={defaultPrice}
+                onChange={handlePriceChange}
+                className="w-full rounded-md border border-input bg-background py-2 pl-7 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="10000"
+              />
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

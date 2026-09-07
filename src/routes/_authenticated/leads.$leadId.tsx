@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useParams } from "@tanstack/react-router";
+import { createFileRoute, Link, useParams, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -6,11 +6,13 @@ import {
   ArrowLeft,
   BellRing,
   Check,
+  Edit2,
   IndianRupee,
   MessageCircle,
   Phone,
   PhoneCall,
   Trash2,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -20,7 +22,9 @@ import {
   CallOutcomeDialog,
   PaymentDialog,
   ReminderDialog,
+  StatusChangeDialog,
   useCrmRefresh,
+  SmartActionDialog,
 } from "@/components/lead-dialogs";
 import {
   ACTIVITY_LABEL,
@@ -30,14 +34,15 @@ import {
   outcomeLabel,
   telHref,
   waHref,
+  ACTION_CONFIG,
   type Lead,
   type LeadStatus,
 } from "@/lib/crm";
 import {
   addNote,
   cancelReminder,
-  changeStatus,
   completeReminder,
+  deleteLead,
   deletePayment,
   fetchActivities,
   fetchLead,
@@ -90,18 +95,11 @@ function LeadDetail() {
   const [callOpen, setCallOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [remindOpen, setRemindOpen] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<LeadStatus | null>(null);
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Partial<Lead>>({});
-
-  const status = useMutation({
-    mutationFn: (next: LeadStatus) => changeStatus(lead!, next),
-    onSuccess: () => {
-      refresh();
-      toast.success("Status updated");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  const [completing, setCompleting] = useState<Reminder | null>(null);
   const saveNote = useMutation({
     mutationFn: () => addNote(lead!, note.trim()),
     onSuccess: () => {
@@ -121,13 +119,7 @@ function LeadDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
   const whatsapp = useMutation({ mutationFn: () => logWhatsapp(lead!), onSuccess: refresh });
-  const doneReminder = useMutation({
-    mutationFn: (id: string) => completeReminder(allReminders.find((r) => r.id === id)!),
-    onSuccess: () => {
-      refresh();
-      toast.success("Reminder completed");
-    },
-  });
+
   const dropReminder = useMutation({
     mutationFn: (id: string) => cancelReminder(allReminders.find((r) => r.id === id)!),
     onSuccess: refresh,
@@ -140,10 +132,39 @@ function LeadDetail() {
     },
   });
 
+  const navigate = useNavigate();
+  const deleteMut = useMutation({
+    mutationFn: async () => {
+      if (confirm("Are you sure you want to delete this lead? This action cannot be undone.")) {
+        await deleteLead(leadId);
+        return true;
+      }
+      return false;
+    },
+    onSuccess: (deleted) => {
+      if (deleted) {
+        toast.success("Lead deleted");
+        navigate({ to: "/leads" });
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   if (isLoading || !lead) {
     return (
-      <AppShell title="Lead">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+      <AppShell title="Loading Lead">
+        <div className="grid gap-4 lg:grid-cols-3 animate-pulse">
+          <div className="space-y-4 lg:col-span-2">
+            <div className="h-32 rounded-xl bg-card border border-border flex items-center justify-center">
+              <div className="h-8 w-1/3 bg-primary/10 rounded-md" />
+            </div>
+            <div className="h-64 rounded-xl bg-card border border-border" />
+          </div>
+          <div className="space-y-4">
+            <div className="h-48 rounded-xl bg-sidebar border border-border" />
+            <div className="h-48 rounded-xl bg-sidebar border border-border" />
+          </div>
+        </div>
       </AppShell>
     );
   }
@@ -155,12 +176,21 @@ function LeadDetail() {
 
   return (
     <AppShell title={lead.name} subtitle={`${lead.phone} · added ${format(new Date(lead.created_at), "d MMM yyyy")}`}>
-      <Link
-        to="/leads"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> All leads
-      </Link>
+      <div className="mb-4 flex items-center justify-between">
+        <Link
+          to="/leads"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" /> All leads
+        </Link>
+        <button
+          onClick={() => deleteMut.mutate()}
+          disabled={deleteMut.isPending}
+          className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive hover:bg-destructive/20 disabled:opacity-50"
+        >
+          <Trash2 className="size-3.5" /> Delete lead
+        </button>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
@@ -221,8 +251,8 @@ function LeadDetail() {
               {LEAD_STATUSES.map((s) => (
                 <button
                   key={s.value}
-                  onClick={() => status.mutate(s.value)}
-                  disabled={status.isPending || s.value === lead.status}
+                  onClick={() => s.value !== lead.status && setStatusTarget(s.value)}
+                  disabled={s.value === lead.status}
                   className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
                     s.value === lead.status ? s.tone : "border-border bg-background hover:bg-secondary"
                   }`}
@@ -406,8 +436,15 @@ function LeadDetail() {
                     className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
                   >
                     <div>
-                      <p className="text-sm font-semibold">{money(p.amount)}</p>
-                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold">{money(p.amount)}</p>
+                        {p.category ? (
+                          <span className="rounded-sm bg-secondary px-1 py-0.5 text-[10px] font-medium uppercase text-secondary-foreground">
+                            {p.category}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">
                         {p.method} · {format(new Date(p.paid_at), "d MMM yyyy")}
                       </p>
                     </div>
@@ -440,12 +477,22 @@ function LeadDetail() {
                     </p>
                     {r.state === "pending" ? (
                       <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={() => doneReminder.mutate(r.id)}
-                          className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-primary-foreground"
-                        >
-                          <Check className="size-3" /> Done
-                        </button>
+                        {(() => {
+                          const action = lead ? ACTION_CONFIG[lead.status] : null;
+                          let Icon = Check;
+                          if (action?.type === "send") Icon = Send;
+                          if (action?.type === "call") Icon = PhoneCall;
+                          if (action?.type === "payment") Icon = IndianRupee;
+
+                          return (
+                            <button
+                              onClick={() => setCompleting(r)}
+                              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-primary-foreground shadow-sm"
+                            >
+                              <Icon className="size-3" /> {action?.label || "Done"}
+                            </button>
+                          );
+                        })()}
                         <button
                           onClick={() => dropReminder.mutate(r.id)}
                           className="rounded-md border border-border px-2.5 py-1.5 text-[11px] font-semibold hover:bg-secondary"
@@ -465,6 +512,18 @@ function LeadDetail() {
       <CallOutcomeDialog lead={lead} open={callOpen} onOpenChange={setCallOpen} />
       <PaymentDialog lead={lead} open={payOpen} onOpenChange={setPayOpen} />
       <ReminderDialog lead={lead} open={remindOpen} onOpenChange={setRemindOpen} />
+      <StatusChangeDialog
+        lead={lead}
+        nextStatus={statusTarget}
+        open={!!statusTarget}
+        onOpenChange={(v) => !v && setStatusTarget(null)}
+      />
+      <SmartActionDialog
+        lead={lead}
+        reminder={completing}
+        open={!!completing}
+        onOpenChange={(v) => !v && setCompleting(null)}
+      />
     </AppShell>
   );
 }

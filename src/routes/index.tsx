@@ -5,7 +5,7 @@ import { Loader2, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 const USERNAME = "crewviabni";
-const ACCOUNT_EMAIL = "crewviabni@crewvia.app";
+const ACCOUNT_EMAIL = "crewvia.bni@gmail.com";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -38,7 +38,7 @@ function SignIn() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/leads", replace: true });
+      if (data.session) navigate({ to: "/reminders", replace: true });
       else setChecking(false);
     });
   }, [navigate]);
@@ -60,7 +60,7 @@ function SignIn() {
       setError("Incorrect username or password.");
       return;
     }
-    navigate({ to: "/leads", replace: true });
+    navigate({ to: "/reminders", replace: true });
   }
 
   if (checking) {
@@ -75,9 +75,9 @@ function SignIn() {
     <div className="grid min-h-screen place-items-center bg-primary px-4 py-10">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-7 shadow-xl">
         <div className="mb-6 flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-xl bg-primary font-display text-base font-bold text-primary-foreground">
-            CB
-          </span>
+          <div className="grid size-12 place-items-center rounded-xl bg-card p-1 shadow-sm border border-border">
+            <img src="/logo.png" alt="Crewvia Logo" className="size-full object-contain" />
+          </div>
           <div>
             <h1 className="font-display text-xl font-bold leading-tight">Crewvia BNI</h1>
             <p className="text-xs text-muted-foreground">Lead Management CRM</p>

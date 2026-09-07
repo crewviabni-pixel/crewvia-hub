@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
-import { EmptyState, StatCard } from "@/components/crm-ui";
+import { EmptyState, LeadCardSkeleton, StatCard } from "@/components/crm-ui";
 import { LeadCard } from "@/components/LeadCard";
 import { CallOutcomeDialog, PaymentDialog, ReminderDialog } from "@/components/lead-dialogs";
 import { LEAD_SOURCES, LEAD_STATUSES, PAYMENT_STATUSES, money, type Lead } from "@/lib/crm";
@@ -80,8 +80,12 @@ function LeadsList() {
     });
   }, [leads, search, status, payment, source, due, sort]);
 
-  const pipeline = filtered.reduce((sum, l) => sum + Number(l.deal_value), 0);
+  const pipeline = filtered.reduce((sum, l) => (l.status === "lost" ? sum : sum + Number(l.deal_value)), 0);
   const collected = filtered.reduce((sum, l) => sum + Number(l.amount_paid), 0);
+  const pending = filtered.reduce(
+    (sum, l) => (l.status === "lost" ? sum : sum + Math.max(Number(l.deal_value) - Number(l.amount_paid), 0)),
+    0
+  );
 
   const selectClass =
     "rounded-lg border border-input bg-background px-2.5 py-2 text-xs font-medium outline-none focus:ring-2 focus:ring-ring";
@@ -103,7 +107,7 @@ function LeadsList() {
         <StatCard label="Leads" value={String(filtered.length)} />
         <StatCard label="Pipeline" value={money(pipeline)} />
         <StatCard label="Collected" value={money(collected)} />
-        <StatCard label="Pending" value={money(pipeline - collected)} accent />
+        <StatCard label="Pending" value={money(pending)} accent />
       </div>
 
       <div className="mb-4 space-y-3 rounded-xl border border-border bg-card p-3">
@@ -165,7 +169,12 @@ function LeadsList() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading leads…</p>
+        <div className="space-y-3">
+          <LeadCardSkeleton />
+          <LeadCardSkeleton />
+          <LeadCardSkeleton />
+          <LeadCardSkeleton />
+        </div>
       ) : filtered.length === 0 ? (
         <EmptyState
           title="No leads match"
