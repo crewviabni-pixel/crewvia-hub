@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/AppShell";
@@ -31,24 +31,25 @@ function AddLead() {
   const navigate = useNavigate();
   const refresh = useCrmRefresh();
 
-  const [form, setForm] = useState(() => {
-    let defaultPrice = "";
-    if (typeof window !== "undefined") {
-      defaultPrice = localStorage.getItem("crewvia_default_price") || "";
-    }
-    return {
-      name: "",
-      phone: "",
-      email: "",
-      company: "",
-      city: "",
-      source: "BNI",
-      service: "",
-      status: "take_info" as LeadStatus,
-      deal_value: defaultPrice,
-      notes: "",
-    };
+  const [form, setForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    company: "",
+    city: "",
+    source: "BNI",
+    service: "",
+    status: "take_info" as LeadStatus,
+    deal_value: "",
+    notes: "",
   });
+
+  // Hydrate default price from localStorage on client mount (SSR can't access localStorage)
+  useEffect(() => {
+    const saved = localStorage.getItem("crewvia_default_price");
+    if (saved) setForm((f) => ({ ...f, deal_value: saved }));
+  }, []);
+
   const [reminderAt, setReminderAt] = useState("");
 
   const set = (key: keyof typeof form, v: string) => setForm((f) => ({ ...f, [key]: v }));

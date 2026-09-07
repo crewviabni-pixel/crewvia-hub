@@ -219,7 +219,7 @@ function LeadDetail() {
                 <Phone className="size-3.5" /> Call {lead.phone}
               </a>
               <a
-                href={waHref(lead.phone, `Hi ${lead.name.split(" ")[0]}, this is Crewvia BNI.`)}
+                href={waHref(lead.phone, `Hi${lead.name ? ` ${lead.name.split(" ")[0]}` : ""}, this is Crewvia BNI.`)}
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => whatsapp.mutate()}

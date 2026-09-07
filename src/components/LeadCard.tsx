@@ -66,12 +66,16 @@ export function LeadCard({
         </div>
         <div className="hidden text-right sm:block space-y-0.5">
           <p className="font-display text-sm font-bold">{money(lead.deal_value)} <span className="text-[10px] font-normal text-muted-foreground uppercase tracking-wider ml-1">Total</span></p>
-          <p className="text-xs text-muted-foreground">{money(lead.amount_paid)} <span className="text-[10px] uppercase tracking-wider ml-1">Rcvd</span></p>
-          {pending > 0 ? (
-            <p className="text-xs font-medium text-amber-600">{money(pending)} <span className="text-[10px] uppercase tracking-wider ml-1">Pend</span></p>
-          ) : (
-            <p className="text-xs font-medium text-emerald-600">Fully Paid</p>
-          )}
+          {Number(lead.deal_value) > 0 ? (
+            <>
+              <p className="text-xs text-muted-foreground">{money(lead.amount_paid)} <span className="text-[10px] uppercase tracking-wider ml-1">Rcvd</span></p>
+              {pending > 0 ? (
+                <p className="text-xs font-medium text-amber-600">{money(pending)} <span className="text-[10px] uppercase tracking-wider ml-1">Pend</span></p>
+              ) : (
+                <p className="text-xs font-medium text-emerald-600">Fully Paid</p>
+              )}
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -94,7 +98,7 @@ export function LeadCard({
           <Phone className="size-3.5" /> Call
         </a>
         <a
-          href={waHref(lead.phone, `Hi ${lead.name.split(" ")[0]}, this is Crewvia BNI.`)}
+          href={waHref(lead.phone, `Hi${lead.name ? ` ${lead.name.split(" ")[0]}` : ""}, this is Crewvia BNI.`)}
           target="_blank"
           rel="noreferrer"
           onClick={() => whatsapp.mutate()}
