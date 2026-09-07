@@ -36,7 +36,7 @@ export const Route = createFileRoute("/_authenticated/analytics")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: Analytics;
+  component: Analytics,
 });
 
 const RANGES = [
