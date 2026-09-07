@@ -55,7 +55,6 @@ function AddLead() {
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!form.name.trim()) throw new Error("Name is required");
       if (form.phone.replace(/\D/g, "").length < 7) throw new Error("Enter a valid phone number");
       return createLead({
         name: form.name.trim(),

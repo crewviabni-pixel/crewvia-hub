@@ -175,7 +175,7 @@ function LeadDetail() {
   const value = <K extends keyof Lead>(key: K) => (draft[key] ?? lead[key]) as Lead[K];
 
   return (
-    <AppShell title={lead.name} subtitle={`${lead.phone} · added ${format(new Date(lead.created_at), "d MMM yyyy")}`}>
+    <AppShell title={lead.name || lead.phone} subtitle={`${lead.name ? lead.phone + " · " : ""}added ${format(new Date(lead.created_at), "d MMM yyyy")}`}>
       <div className="mb-4 flex items-center justify-between">
         <Link
           to="/leads"

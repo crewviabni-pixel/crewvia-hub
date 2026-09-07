@@ -36,7 +36,7 @@ export function LeadCard({
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-start gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary font-display text-sm font-bold text-secondary-foreground">
-          {initials(lead.name)}
+          {initials(lead.name || "#")}
         </span>
         <div className="min-w-0 flex-1">
           <Link
@@ -44,7 +44,7 @@ export function LeadCard({
             params={{ leadId: lead.id }}
             className="font-display text-base font-semibold hover:underline"
           >
-            {lead.name}
+            {lead.name || lead.phone}
           </Link>
           <p className="truncate text-sm text-muted-foreground">
             {lead.phone}

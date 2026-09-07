@@ -294,7 +294,7 @@ function ReminderCard({
                 params={{ leadId: lead.id }}
                 className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
               >
-                {lead.name} · {lead.phone}
+                {lead.name ? lead.name + " · " : ""}{lead.phone}
               </Link>
             </div>
           ) : null}

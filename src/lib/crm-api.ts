@@ -117,7 +117,7 @@ export async function createLead(input: NewLeadInput): Promise<Lead> {
   if (firstReminderAt) {
     await createReminder({
       leadId: data.id,
-      title: `Follow up with ${data.name}`,
+      title: `Follow up with ${data.name || data.phone}`,
       dueAt: firstReminderAt,
     });
   }
@@ -172,7 +172,7 @@ export async function changeStatus(
     if (config) {
       await createReminder({
         leadId: lead.id,
-        title: config.titleTemplate.replace("{name}", lead.name),
+        title: config.titleTemplate.replace("{name}", lead.name || lead.phone),
         dueAt: reminderAt,
       });
     }
@@ -222,7 +222,7 @@ export async function logCall(
   if (reminderAt) {
     await createReminder({
       leadId: lead.id,
-      title: `Follow up with ${lead.name}`,
+      title: `Follow up with ${lead.name || lead.phone}`,
       dueAt: reminderAt,
     });
   }
