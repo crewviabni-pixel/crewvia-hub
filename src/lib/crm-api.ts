@@ -296,6 +296,21 @@ export async function createReminder(input: { leadId: string; title: string; due
   });
 }
 
+export async function editReminder(
+  reminder: Reminder,
+  patch: { title?: string; dueAt?: string },
+) {
+  const update: Record<string, unknown> = {};
+  if (patch.title) update.title = patch.title;
+  if (patch.dueAt) update.due_at = patch.dueAt;
+  const { error } = await supabase
+    .from("reminders")
+    .update(update)
+    .eq("id", reminder.id);
+  if (error) throw error;
+  await syncNextReminder(reminder.lead_id);
+}
+
 export async function completeReminder(reminder: Reminder) {
   const { error } = await supabase
     .from("reminders")

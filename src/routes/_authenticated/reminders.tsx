@@ -2,15 +2,17 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { format, isToday } from "date-fns";
-import { Check, Clock, MessageCircle, Phone, Send, PhoneCall, IndianRupee } from "lucide-react";
+import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, StatCard, StatCardSkeleton, StatusPill } from "@/components/crm-ui";
-import { useCrmRefresh, SmartActionDialog } from "@/components/lead-dialogs";
+import { useCrmRefresh, SmartActionDialog, toLocalInputValue } from "@/components/lead-dialogs";
 import { ACTIVITY_LABEL, telHref, waHref, ACTION_CONFIG, type Lead, type Reminder, type LeadStatus } from "@/lib/crm";
 import {
+  cancelReminder,
   completeReminder,
+  editReminder,
   fetchActivities,
   fetchLeads,
   fetchReminders,
@@ -78,6 +80,21 @@ function RemindersPage() {
     onSuccess: () => {
       refresh();
       toast.success("Snoozed");
+    },
+  });
+  const deleteMut = useMutation({
+    mutationFn: (r: Reminder) => cancelReminder(r),
+    onSuccess: () => {
+      refresh();
+      toast.success("Reminder deleted");
+    },
+  });
+  const editMut = useMutation({
+    mutationFn: (p: { r: Reminder; title: string; dueAt: string }) =>
+      editReminder(p.r, { title: p.title, dueAt: new Date(p.dueAt).toISOString() }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Reminder updated");
     },
   });
 
@@ -152,6 +169,8 @@ function RemindersPage() {
                 leadMap={leadMap}
                 onDone={(r, lead) => setCompleting({ r, lead })}
                 snooze={snooze}
+                onDelete={(r) => deleteMut.mutate(r)}
+                onEdit={(r, title, dueAt) => editMut.mutate({ r, title, dueAt })}
               />
             </div>
           </div>
@@ -209,11 +228,15 @@ function TimelineView({
   leadMap,
   onDone,
   snooze,
+  onDelete,
+  onEdit,
 }: {
   items: Reminder[];
   leadMap: Map<string, Lead>;
   onDone: (r: Reminder, lead?: Lead) => void;
   snooze: any;
+  onDelete: (r: Reminder) => void;
+  onEdit: (r: Reminder, title: string, dueAt: string) => void;
 }) {
   if (items.length === 0) {
     return <EmptyState title="All clear" body="No reminders for this time period." />;
@@ -242,6 +265,8 @@ function TimelineView({
               lead={lead}
               onDone={() => onDone(r, lead)}
               onSnooze={(hours) => snooze.mutate({ r: r, hours })}
+              onDelete={() => onDelete(r)}
+              onEdit={(title, dueAt) => onEdit(r, title, dueAt)}
             />
           </div>
         );
@@ -278,17 +303,37 @@ function ReminderCard({
   lead,
   onDone,
   onSnooze,
+  onDelete,
+  onEdit,
 }: {
   reminder: Reminder;
   lead: Lead | undefined;
   onDone: () => void;
   onSnooze: (hours: number) => void;
+  onDelete: () => void;
+  onEdit: (title: string, dueAt: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(reminder.title);
+  const [editDue, setEditDue] = useState(toLocalInputValue(new Date(reminder.due_at)));
+
+  const fieldClass =
+    "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
+
   return (
     <article className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
       <div className="mb-2 flex items-start justify-between gap-3">
-        <div>
-          <p className="font-display text-base font-semibold text-foreground">{reminder.title}</p>
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <input
+              className={fieldClass}
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Reminder title"
+            />
+          ) : (
+            <p className="font-display text-base font-semibold text-foreground">{reminder.title}</p>
+          )}
           {lead ? (
             <div className="mt-1 flex items-center gap-2">
               <Link
@@ -301,66 +346,105 @@ function ReminderCard({
             </div>
           ) : null}
         </div>
-        {lead?.status && <StatusPill status={lead.status} />}
-      </div>
-      
-      <div className="mb-4 rounded-lg bg-secondary/50 p-2.5 text-sm text-secondary-foreground border border-secondary/20">
-        <p className="font-medium">{getReminderContext(lead?.status)}</p>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-          {format(new Date(reminder.due_at), "h:mm a")}
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {(() => {
-            const action = lead ? ACTION_CONFIG[lead.status] : null;
-            let Icon = Check;
-            if (action?.type === "send") Icon = Send;
-            if (action?.type === "call") Icon = PhoneCall;
-            if (action?.type === "payment") Icon = IndianRupee;
-
-            return (
-              <button
-                onClick={onDone}
-                className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
-              >
-                <Icon className="size-3.5" /> {action?.label || "Done"}
-              </button>
-            );
-          })()}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {!editing && lead?.status && <StatusPill status={lead.status} />}
           <button
-            onClick={() => onSnooze(2)}
-            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-secondary"
+            onClick={() => {
+              if (editing) {
+                onEdit(editTitle, editDue);
+                setEditing(false);
+              } else {
+                setEditing(true);
+              }
+            }}
+            className="rounded-md border border-border p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            title={editing ? "Save" : "Edit"}
           >
-            <Clock className="size-3.5" /> +2h
+            {editing ? <Check className="size-3.5" /> : <Pencil className="size-3.5" />}
           </button>
           <button
-            onClick={() => onSnooze(24)}
-            className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-secondary"
+            onClick={() => {
+              if (confirm("Delete this reminder?")) onDelete();
+            }}
+            className="rounded-md border border-destructive/30 p-1.5 text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
+            title="Delete"
           >
-            +1d
+            <Trash2 className="size-3.5" />
           </button>
-          {lead ? (
-            <>
-              <a
-                href={telHref(lead.phone)}
-                className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-secondary"
-              >
-                <Phone className="size-3.5" /> Call
-              </a>
-              <a
-                href={waHref(lead.phone, `Hi ${lead.name.split(" ")[0]}, this is Crewvia BNI.`)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition-colors hover:bg-emerald-100"
-              >
-                <MessageCircle className="size-3.5" /> WA
-              </a>
-            </>
-          ) : null}
         </div>
       </div>
+
+      {editing ? (
+        <div className="mb-4">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Reschedule to</label>
+          <input
+            type="datetime-local"
+            className={fieldClass}
+            value={editDue}
+            onChange={(e) => setEditDue(e.target.value)}
+          />
+        </div>
+      ) : (
+        <div className="mb-4 rounded-lg bg-secondary/50 p-2.5 text-sm text-secondary-foreground border border-secondary/20">
+          <p className="font-medium">{getReminderContext(lead?.status)}</p>
+        </div>
+      )}
+
+      {!editing && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+            {format(new Date(reminder.due_at), "h:mm a")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {(() => {
+              const action = lead ? ACTION_CONFIG[lead.status] : null;
+              let Icon = Check;
+              if (action?.type === "send") Icon = Send;
+              if (action?.type === "call") Icon = PhoneCall;
+              if (action?.type === "payment") Icon = IndianRupee;
+
+              return (
+                <button
+                  onClick={onDone}
+                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
+                >
+                  <Icon className="size-3.5" /> {action?.label || "Done"}
+                </button>
+              );
+            })()}
+            <button
+              onClick={() => onSnooze(2)}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-secondary"
+            >
+              <Clock className="size-3.5" /> +2h
+            </button>
+            <button
+              onClick={() => onSnooze(24)}
+              className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-secondary"
+            >
+              +1d
+            </button>
+            {lead ? (
+              <>
+                <a
+                  href={telHref(lead.phone)}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-secondary"
+                >
+                  <Phone className="size-3.5" /> Call
+                </a>
+                <a
+                  href={waHref(lead.phone, `Hi${lead.name ? ` ${lead.name.split(" ")[0]}` : ""}, this is Crewvia BNI.`)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition-colors hover:bg-emerald-100"
+                >
+                  <MessageCircle className="size-3.5" /> WA
+                </a>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
     </article>
   );
 }
