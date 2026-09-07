@@ -12,7 +12,8 @@ export type CallOutcome = Database["public"]["Enums"]["call_outcome"];
 export type ActivityKind = Database["public"]["Enums"]["activity_kind"];
 
 export const LEAD_STATUSES: { value: LeadStatus; label: string; tone: string }[] = [
-  { value: "info_taken", label: "Info Taken", tone: "bg-sky-100 text-sky-900 border-sky-300" },
+  { value: "take_info", label: "Take Info", tone: "bg-sky-100 text-sky-900 border-sky-300" },
+  { value: "info_taken", label: "Info Taken", tone: "bg-blue-100 text-blue-900 border-blue-300" },
   { value: "draft_sent", label: "Draft Sent", tone: "bg-indigo-100 text-indigo-900 border-indigo-300" },
   { value: "approved", label: "Approved", tone: "bg-amber-100 text-amber-900 border-amber-300" },
   { value: "advance_received", label: "Advance Rec.", tone: "bg-orange-100 text-orange-900 border-orange-300" },
@@ -25,6 +26,10 @@ export const LEAD_STATUSES: { value: LeadStatus; label: string; tone: string }[]
 export const STATUS_REMINDER_CONFIG: Partial<
   Record<LeadStatus, { prompt: string; titleTemplate: string }>
 > = {
+  take_info: {
+    prompt: "When should you call for info?",
+    titleTemplate: "Call {name} for info",
+  },
   info_taken: {
     prompt: "When should you send the draft?",
     titleTemplate: "Send draft to {name}",
@@ -48,6 +53,7 @@ export const STATUS_REMINDER_CONFIG: Partial<
 };
 
 export const NEXT_STATUS_MAP: Partial<Record<LeadStatus, LeadStatus>> = {
+  take_info: "info_taken",
   info_taken: "draft_sent",
   draft_sent: "approved",
   approved: "advance_received",
@@ -58,6 +64,7 @@ export const NEXT_STATUS_MAP: Partial<Record<LeadStatus, LeadStatus>> = {
 export type SmartActionType = "send" | "call" | "payment" | "generic";
 
 export const ACTION_CONFIG: Record<LeadStatus, { type: SmartActionType; label: string; category?: PaymentCategory }> = {
+  take_info: { type: "call", label: "Log Call" },
   info_taken: { type: "send", label: "Send Draft" },
   draft_sent: { type: "call", label: "Log Call" },
   approved: { type: "payment", label: "Record Advance", category: "advance" },

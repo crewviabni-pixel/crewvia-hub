@@ -246,6 +246,7 @@ export type Database = {
         | "switched_off"
         | "callback_later"
       lead_status:
+        | "take_info"
         | "info_taken"
         | "draft_sent"
         | "approved"
@@ -403,6 +404,7 @@ export const Constants = {
         "callback_later",
       ],
       lead_status: [
+        "take_info",
         "info_taken",
         "draft_sent",
         "approved",

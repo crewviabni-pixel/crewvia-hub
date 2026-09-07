@@ -44,7 +44,7 @@ function AddLead() {
       city: "",
       source: "BNI",
       service: "",
-      status: "info_taken" as LeadStatus,
+      status: "take_info" as LeadStatus,
       deal_value: defaultPrice,
       notes: "",
     };

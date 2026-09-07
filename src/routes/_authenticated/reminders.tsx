@@ -252,6 +252,8 @@ function TimelineView({
 
 function getReminderContext(status?: LeadStatus) {
   switch (status) {
+    case "take_info":
+      return "Action: Call the lead to gather requirements.";
     case "info_taken":
       return "Action: Send draft or presentation to move forward.";
     case "draft_sent":
