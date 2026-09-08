@@ -23,8 +23,11 @@ import {
   type Reminder,
   NEXT_STATUS_MAP,
   ACTION_CONFIG,
+  ACTIVITY_LABEL,
 } from "@/lib/crm";
-import { changeStatus, completeReminder, createReminder, logCall, recordPayment, addNote, cancelAllReminders } from "@/lib/crm-api";
+import { changeStatus, completeReminder, createReminder, logCall, recordPayment, addNote, cancelAllReminders, fetchActivities } from "@/lib/crm-api";
+import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 
 export function useCrmRefresh() {
   const queryClient = useQueryClient();
@@ -826,6 +829,63 @@ export function SmartActionDialog({
             Save & Complete Task
           </button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* -------------------------------- history -------------------------------- */
+
+export function LeadHistoryDialog({
+  lead,
+  open,
+  onOpenChange,
+}: {
+  lead: Lead | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { data: activities = [], isLoading } = useQuery({
+    queryKey: ["activities", lead?.id],
+    queryFn: () => lead ? fetchActivities(lead.id) : Promise.resolve([]),
+    enabled: !!lead && open,
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="font-display">History — {lead?.name || lead?.phone}</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="animate-pulse rounded-lg border border-border bg-card p-3">
+                  <div className="h-4 w-1/2 rounded bg-primary/10 mb-2" />
+                  <div className="h-3 w-1/3 rounded bg-primary/10" />
+                </div>
+              ))}
+            </div>
+          ) : activities.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-6">No activity recorded yet.</p>
+          ) : (
+            <ol className="relative border-l-2 border-border/60 ml-3 space-y-4">
+              {activities.map((a) => (
+                <li key={a.id} className="relative pl-5">
+                  <div className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
+                  <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+                    <p className="text-sm font-semibold">{a.summary}</p>
+                    {a.detail ? <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">{a.detail}</p> : null}
+                    <p className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                      {ACTIVITY_LABEL[a.kind]} · {format(new Date(a.created_at), "MMM d, h:mm a")}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

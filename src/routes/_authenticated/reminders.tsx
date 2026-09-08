@@ -2,13 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { format, isToday } from "date-fns";
-import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2 } from "lucide-react";
+import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2, List } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, StatCard, StatCardSkeleton, StatusPill } from "@/components/crm-ui";
-import { useCrmRefresh, SmartActionDialog, toLocalInputValue } from "@/components/lead-dialogs";
-import { ACTIVITY_LABEL, telHref, waHref, ACTION_CONFIG, type Lead, type Reminder, type LeadStatus } from "@/lib/crm";
+import { useCrmRefresh, SmartActionDialog, LeadHistoryDialog, toLocalInputValue } from "@/components/lead-dialogs";
+import { ACTIVITY_LABEL, telHref, waHref, ACTION_CONFIG, type Lead, type Reminder, type LeadStatus, type Activity } from "@/lib/crm";
 import {
   cancelReminder,
   completeReminder,
@@ -115,6 +115,7 @@ function RemindersPage() {
 
   const [activeTab, setActiveTab] = useState<Column>("Today");
   const [completing, setCompleting] = useState<{r: Reminder, lead: Lead | undefined} | null>(null);
+  const [historyLead, setHistoryLead] = useState<Lead | null>(null);
 
   return (
     <AppShell
@@ -167,10 +168,12 @@ function RemindersPage() {
               <TimelineView
                 items={buckets.find((b) => b.col === activeTab)?.items || []}
                 leadMap={leadMap}
+                activities={activities}
                 onDone={(r, lead) => setCompleting({ r, lead })}
                 snooze={snooze}
                 onDelete={(r) => deleteMut.mutate(r)}
                 onEdit={(r, title, dueAt) => editMut.mutate({ r, title, dueAt })}
+                onShowHistory={(lead) => setHistoryLead(lead)}
               />
             </div>
           </div>
@@ -219,6 +222,12 @@ function RemindersPage() {
           lead={completing.lead ?? null}
         />
       )}
+      
+      <LeadHistoryDialog 
+        lead={historyLead}
+        open={!!historyLead}
+        onOpenChange={(v) => !v && setHistoryLead(null)}
+      />
     </AppShell>
   );
 }
@@ -226,17 +235,21 @@ function RemindersPage() {
 function TimelineView({
   items,
   leadMap,
+  activities,
   onDone,
   snooze,
   onDelete,
   onEdit,
+  onShowHistory,
 }: {
   items: Reminder[];
   leadMap: Map<string, Lead>;
+  activities: Activity[];
   onDone: (r: Reminder, lead?: Lead) => void;
   snooze: any;
   onDelete: (r: Reminder) => void;
   onEdit: (r: Reminder, title: string, dueAt: string) => void;
+  onShowHistory: (lead: Lead) => void;
 }) {
   if (items.length === 0) {
     return <EmptyState title="All clear" body="No reminders for this time period." />;
@@ -252,6 +265,9 @@ function TimelineView({
       {sorted.map((r) => {
         const time = format(new Date(r.due_at), "h a");
         const lead = leadMap.get(r.lead_id);
+        const leadActivities = activities.filter(a => a.lead_id === r.lead_id && ["call", "note", "payment", "status_change"].includes(a.kind));
+        const lastActivity = leadActivities.length > 0 ? leadActivities[0] : null;
+
         return (
           <div key={r.id} className="relative pl-6 sm:pl-8">
             <div className="absolute -left-[5px] top-6 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
@@ -263,10 +279,12 @@ function TimelineView({
             <ReminderCard
               reminder={r}
               lead={lead}
+              lastActivity={lastActivity}
               onDone={() => onDone(r, lead)}
               onSnooze={(hours) => snooze.mutate({ r: r, hours })}
               onDelete={() => onDelete(r)}
               onEdit={(title, dueAt) => onEdit(r, title, dueAt)}
+              onShowHistory={() => lead && onShowHistory(lead)}
             />
           </div>
         );
@@ -301,17 +319,21 @@ function getReminderContext(status?: LeadStatus) {
 function ReminderCard({
   reminder,
   lead,
+  lastActivity,
   onDone,
   onSnooze,
   onDelete,
   onEdit,
+  onShowHistory,
 }: {
   reminder: Reminder;
   lead: Lead | undefined;
+  lastActivity?: Activity | null;
   onDone: () => void;
   onSnooze: (hours: number) => void;
   onDelete: () => void;
   onEdit: (title: string, dueAt: string) => void;
+  onShowHistory: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(reminder.title);
@@ -348,6 +370,15 @@ function ReminderCard({
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {!editing && lead?.status && <StatusPill status={lead.status} />}
+          {!editing && lead && (
+            <button
+              onClick={onShowHistory}
+              className="rounded-md border border-border p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              title="History"
+            >
+              <List className="size-3.5" />
+            </button>
+          )}
           <button
             onClick={() => {
               if (editing) {
@@ -385,8 +416,20 @@ function ReminderCard({
           />
         </div>
       ) : (
-        <div className="mb-4 rounded-lg bg-secondary/50 p-2.5 text-sm text-secondary-foreground border border-secondary/20">
-          <p className="font-medium">{getReminderContext(lead?.status)}</p>
+        <div className="mb-4 space-y-2">
+          <div className="rounded-lg bg-secondary/50 p-2.5 text-sm text-secondary-foreground border border-secondary/20">
+            <p className="font-medium">{getReminderContext(lead?.status)}</p>
+          </div>
+          {lastActivity && (
+            <div className="rounded-lg bg-muted/30 p-2.5 text-xs text-muted-foreground border border-border/50">
+              <span className="font-semibold">{ACTIVITY_LABEL[lastActivity.kind]}:</span>{" "}
+              {lastActivity.summary}
+              {lastActivity.detail ? ` — ${lastActivity.detail}` : ""}
+              <span className="text-[10px] opacity-70 block mt-1">
+                {format(new Date(lastActivity.created_at), "MMM d, h:mm a")}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
