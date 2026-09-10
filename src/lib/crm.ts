@@ -4,6 +4,8 @@ export type Lead = Database["public"]["Tables"]["leads"]["Row"];
 export type Activity = Database["public"]["Tables"]["activities"]["Row"];
 export type Reminder = Database["public"]["Tables"]["reminders"]["Row"];
 export type Payment = Database["public"]["Tables"]["payments"]["Row"];
+export type MessageTemplate = Database["public"]["Tables"]["message_templates"]["Row"];
+export type LeadTemplateProgress = Database["public"]["Tables"]["lead_template_progress"]["Row"];
 
 export type LeadStatus = Database["public"]["Enums"]["lead_status"];
 export type PaymentStatus = Database["public"]["Enums"]["payment_status"];
@@ -165,3 +167,21 @@ export const ACTIVITY_LABEL: Record<ActivityKind, string> = {
   field_update: "Details updated",
   whatsapp: "WhatsApp opened",
 };
+
+export function renderTemplate(template: string, lead: Partial<Lead> | null) {
+  if (!lead) return template;
+  
+  return template.replace(/\$\{([^}]+)\}/g, (match, variable) => {
+    if (variable === "name") {
+      if (!lead.name || lead.name.trim() === "") {
+        return "Sir/Madam";
+      }
+      return lead.name.split(" ")[0] || "Sir/Madam"; // First name
+    }
+    if (variable === "company") return lead.company || "your company";
+    if (variable === "city") return lead.city || "your city";
+    
+    // Unrecognized variables are left as is, or you could return an empty string
+    return match;
+  });
+}

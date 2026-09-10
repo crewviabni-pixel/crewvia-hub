@@ -24,10 +24,12 @@ import {
   NEXT_STATUS_MAP,
   ACTION_CONFIG,
   ACTIVITY_LABEL,
+  renderTemplate,
 } from "@/lib/crm";
-import { changeStatus, completeReminder, createReminder, logCall, recordPayment, addNote, cancelAllReminders, fetchActivities } from "@/lib/crm-api";
+import { changeStatus, completeReminder, createReminder, logCall, recordPayment, addNote, cancelAllReminders, fetchActivities, getNextMessageTemplate, recordTemplateUsage } from "@/lib/crm-api";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { Copy, MessageCircle } from "lucide-react";
 
 export function useCrmRefresh() {
   const queryClient = useQueryClient();
@@ -100,6 +102,7 @@ export function CallOutcomeDialog({
                 </button>
               ))}
             </div>
+            {lead && <TemplateSuggester lead={lead} status={lead.status} scenario={outcome} />}
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium">Move status to (optional)</label>
@@ -687,6 +690,7 @@ export function SmartActionDialog({
                   ))}
                 </select>
               </div>
+              {lead && <TemplateSuggester lead={lead} status={lead.status} scenario={outcome} />}
               {outcome === "connected" && nextStatus && (
                 <div className="flex items-center gap-2">
                   <input
@@ -888,5 +892,53 @@ export function LeadHistoryDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function TemplateSuggester({ lead, status, scenario }: { lead: Lead; status: LeadStatus; scenario: CallOutcome }) {
+  const { data: template, isLoading } = useQuery({
+    queryKey: ['nextTemplate', lead.id, status, scenario],
+    queryFn: () => getNextMessageTemplate(lead.id, status, scenario),
+  });
+
+  const queryClient = useQueryClient();
+
+  if (isLoading) {
+    return <div className="animate-pulse h-12 bg-secondary/30 rounded-lg mt-2"></div>;
+  }
+
+  if (!template) {
+    return null; // Sequence exhausted or no templates
+  }
+
+  const messageText = renderTemplate(template.message, lead);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(messageText);
+      await recordTemplateUsage(lead.id, status, scenario, template.followup_order);
+      toast.success('Message copied to clipboard!');
+      queryClient.invalidateQueries({ queryKey: ['nextTemplate', lead.id, status, scenario] });
+    } catch (err) {
+      toast.error('Failed to copy message');
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-primary flex items-center gap-1.5">
+          <MessageCircle className="size-3.5" /> {template.name}
+        </p>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
+        >
+          <Copy className="size-3" /> Copy Message
+        </button>
+      </div>
+      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{messageText}</p>
+    </div>
   );
 }

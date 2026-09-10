@@ -37,6 +37,7 @@ import {
   ACTION_CONFIG,
   type Lead,
   type LeadStatus,
+  type Reminder,
 } from "@/lib/crm";
 import {
   addNote,

@@ -1,17 +1,19 @@
 import { supabase } from "@/integrations/supabase/client";
-import type {
-  Activity,
-  ActivityKind,
-  CallOutcome,
-  Lead,
-  LeadStatus,
-  Payment,
-  PaymentCategory,
-  Reminder,
+import {
+  STATUS_REMINDER_CONFIG,
+  statusMeta,
+  type Activity,
+  type ActivityKind,
+  type CallOutcome,
+  type Lead,
+  type LeadStatus,
+  type MessageTemplate,
+  type Payment,
+  type PaymentCategory,
+  type Reminder,
 } from "@/lib/crm";
-import { statusMeta, STATUS_REMINDER_CONFIG } from "@/lib/crm";
 
-/* ---------------------------------- reads --------------------------------- */
+/* ---------------------------------- reads ----------------- */
 
 export async function fetchLeads(): Promise<Lead[]> {
   const { data, error } = await supabase
@@ -86,6 +88,7 @@ export type NewLeadInput = {
   status: LeadStatus;
   deal_value: number;
   notes?: string;
+  bni_presentation_date?: string | null;
   firstReminderAt?: string | null;
 };
 
@@ -300,7 +303,7 @@ export async function editReminder(
   reminder: Reminder,
   patch: { title?: string; dueAt?: string },
 ) {
-  const update: Record<string, unknown> = {};
+  const update: any = {};
   if (patch.title) update.title = patch.title;
   if (patch.dueAt) update.due_at = patch.dueAt;
   const { error } = await supabase
@@ -379,3 +382,88 @@ async function syncNextReminder(leadId: string) {
     .update({ next_reminder_at: data?.[0]?.due_at ?? null })
     .eq("id", leadId);
 }
+
+/* -------------------------------- templates -------------------------------- */
+
+export async function fetchMessageTemplates() {
+  const { data, error } = await supabase
+    .from("message_templates")
+    .select("*")
+    .order("status")
+    .order("scenario")
+    .order("followup_order");
+  if (error) throw error;
+  return data;
+}
+
+export async function saveMessageTemplate(
+  template: Partial<MessageTemplate> & { name: string; message: string; status: LeadStatus; scenario: CallOutcome; followup_order: number; is_active: boolean }
+) {
+  if (template.id) {
+    const { error } = await supabase
+      .from("message_templates")
+      .update({
+        name: template.name,
+        message: template.message,
+        status: template.status,
+        scenario: template.scenario,
+        followup_order: template.followup_order,
+        is_active: template.is_active,
+      })
+      .eq("id", template.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("message_templates").insert(template);
+    if (error) throw error;
+  }
+}
+
+export async function deleteMessageTemplate(id: string) {
+  const { error } = await supabase.from("message_templates").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function getNextMessageTemplate(leadId: string, status: LeadStatus, scenario: CallOutcome) {
+  // Find current progress
+  const { data: progress } = await supabase
+    .from("lead_template_progress")
+    .select("last_order_used")
+    .eq("lead_id", leadId)
+    .eq("status", status)
+    .eq("scenario", scenario)
+    .maybeSingle();
+
+  const lastOrder = progress?.last_order_used ?? -1;
+
+  // Find next template
+  const { data: nextTemplate } = await supabase
+    .from("message_templates")
+    .select("*")
+    .eq("status", status)
+    .eq("scenario", scenario)
+    .eq("is_active", true)
+    .gt("followup_order", lastOrder)
+    .order("followup_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  return nextTemplate;
+}
+
+export async function recordTemplateUsage(leadId: string, status: LeadStatus, scenario: CallOutcome, order: number) {
+  const { error } = await supabase
+    .from("lead_template_progress")
+    .upsert(
+      { lead_id: leadId, status, scenario, last_order_used: order },
+      { onConflict: "lead_id,status,scenario" }
+    );
+  if (error) throw error;
+
+  await logActivity({
+    leadId,
+    kind: "whatsapp",
+    summary: "Message template copied",
+    detail: `Scenario: ${scenario.replace(/_/g, " ")} (Order ${order})`,
+  });
+}
+

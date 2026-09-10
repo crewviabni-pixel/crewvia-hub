@@ -58,14 +58,16 @@ function Analytics() {
   const [days, setDays] = useState(30);
 
   const lq = useQuery({ queryKey: ["leads"], queryFn: fetchLeads });
-  const aq = useQuery({ queryKey: ["activities"], queryFn: fetchActivities });
-  const pq = useQuery({ queryKey: ["payments"], queryFn: fetchPayments });
+  const aq = useQuery({ queryKey: ["activities"], queryFn: () => fetchActivities() });
+  const { data: payments = [], isLoading: isPaymentsLoading } = useQuery({
+    queryKey: ["payments"],
+    queryFn: () => fetchPayments(),
+  });
   const rq = useQuery({ queryKey: ["reminders"], queryFn: fetchReminders });
 
-  const isLoading = lq.isLoading || aq.isLoading || pq.isLoading || rq.isLoading;
+  const isLoading = lq.isLoading || aq.isLoading || isPaymentsLoading || rq.isLoading;
   const leads = lq.data || [];
   const activities = aq.data || [];
-  const payments = pq.data || [];
   const reminders = rq.data || [];
 
   const since = days ? subDays(new Date(), days) : new Date(0);

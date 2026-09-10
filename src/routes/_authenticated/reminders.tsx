@@ -6,7 +6,7 @@ import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupe
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/AppShell";
-import { EmptyState, StatCard, StatCardSkeleton, StatusPill } from "@/components/crm-ui";
+import { EmptyState, StatCard, StatCardSkeleton, StatusPill, BniDateDisplay } from "@/components/crm-ui";
 import { useCrmRefresh, SmartActionDialog, LeadHistoryDialog, toLocalInputValue } from "@/components/lead-dialogs";
 import { ACTIVITY_LABEL, telHref, waHref, ACTION_CONFIG, type Lead, type Reminder, type LeadStatus, type Activity } from "@/lib/crm";
 import {
@@ -279,7 +279,7 @@ function TimelineView({
             <ReminderCard
               reminder={r}
               lead={lead}
-              lastActivity={lastActivity}
+              lastActivity={lastActivity ?? null}
               onDone={() => onDone(r, lead)}
               onSnooze={(hours) => snooze.mutate({ r: r, hours })}
               onDelete={() => onDelete(r)}
@@ -428,6 +428,11 @@ function ReminderCard({
               <span className="text-[10px] opacity-70 block mt-1">
                 {format(new Date(lastActivity.created_at), "MMM d, h:mm a")}
               </span>
+            </div>
+          )}
+          {lead && (
+            <div>
+              <BniDateDisplay lead={lead} />
             </div>
           )}
         </div>

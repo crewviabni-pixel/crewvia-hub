@@ -42,6 +42,7 @@ function AddLead() {
     status: "take_info" as LeadStatus,
     deal_value: "",
     notes: "",
+    bni_presentation_date: "",
   });
 
   // Hydrate default price from localStorage on client mount (SSR can't access localStorage)
@@ -57,6 +58,13 @@ function AddLead() {
   const save = useMutation({
     mutationFn: async () => {
       if (form.phone.replace(/\D/g, "").length < 7) throw new Error("Enter a valid phone number");
+      
+      let finalDealValue = Number(form.deal_value);
+      if (!finalDealValue) {
+        const defaultPrice = localStorage.getItem("crewvia_default_price") || "10000";
+        finalDealValue = Number(defaultPrice);
+      }
+
       return createLead({
         name: form.name.trim(),
         phone: form.phone.trim(),
@@ -66,8 +74,9 @@ function AddLead() {
         source: form.source,
         service: form.service.trim(),
         status: form.status,
-        deal_value: Number(form.deal_value || 0),
+        deal_value: finalDealValue,
         notes: form.notes.trim(),
+        bni_presentation_date: form.bni_presentation_date || null,
         firstReminderAt: reminderAt ? new Date(reminderAt).toISOString() : null,
       });
     },
@@ -136,7 +145,15 @@ function AddLead() {
             inputMode="numeric"
             value={form.deal_value}
             onChange={(e) => set("deal_value", e.target.value)}
-            placeholder="0"
+            placeholder={typeof window !== "undefined" ? (localStorage.getItem("crewvia_default_price") || "10000") : "10000"}
+          />
+        </Labelled>
+        <Labelled label="BNI Presentation Date">
+          <input
+            className={fieldClass}
+            type="date"
+            value={form.bni_presentation_date}
+            onChange={(e) => set("bni_presentation_date", e.target.value)}
           />
         </Labelled>
         <Labelled label="First follow-up reminder">

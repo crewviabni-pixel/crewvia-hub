@@ -57,6 +57,7 @@ export type Database = {
       }
       leads: {
         Row: {
+          bni_presentation_date: string | null
           amount_paid: number
           call_count: number
           city: string | null
@@ -82,6 +83,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bni_presentation_date?: string | null
           amount_paid?: number
           call_count?: number
           city?: string | null
@@ -107,6 +109,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bni_presentation_date?: string | null
           amount_paid?: number
           call_count?: number
           city?: string | null
@@ -216,6 +219,74 @@ export type Database = {
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      message_templates: {
+        Row: {
+          id: string
+          name: string
+          message: string
+          status: Database["public"]["Enums"]["lead_status"]
+          scenario: Database["public"]["Enums"]["call_outcome"]
+          followup_order: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          message: string
+          status: Database["public"]["Enums"]["lead_status"]
+          scenario: Database["public"]["Enums"]["call_outcome"]
+          followup_order?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          message?: string
+          status?: Database["public"]["Enums"]["lead_status"]
+          scenario?: Database["public"]["Enums"]["call_outcome"]
+          followup_order?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      lead_template_progress: {
+        Row: {
+          lead_id: string
+          status: Database["public"]["Enums"]["lead_status"]
+          scenario: Database["public"]["Enums"]["call_outcome"]
+          last_order_used: number
+          updated_at: string
+        }
+        Insert: {
+          lead_id: string
+          status: Database["public"]["Enums"]["lead_status"]
+          scenario: Database["public"]["Enums"]["call_outcome"]
+          last_order_used: number
+          updated_at?: string
+        }
+        Update: {
+          lead_id?: string
+          status?: Database["public"]["Enums"]["lead_status"]
+          scenario?: Database["public"]["Enums"]["call_outcome"]
+          last_order_used?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_template_progress_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          }
         ]
       }
     }

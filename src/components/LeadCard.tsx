@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { BellRing, IndianRupee, MessageCircle, Phone, PhoneCall } from "lucide-react";
 
-import { PaymentPill, StatusPill } from "@/components/crm-ui";
+import { PaymentPill, StatusPill, BniDateDisplay } from "@/components/crm-ui";
 import { StatusChangeDialog, useCrmRefresh } from "@/components/lead-dialogs";
 import { LEAD_STATUSES, initials, money, telHref, waHref, type Lead, type LeadStatus } from "@/lib/crm";
 import { logWhatsapp } from "@/lib/crm-api";
@@ -62,6 +62,9 @@ export function LeadCard({
                 {lead.call_count} call{lead.call_count > 1 ? "s" : ""}
               </span>
             ) : null}
+          </div>
+          <div className="mt-1">
+            <BniDateDisplay lead={lead} />
           </div>
         </div>
         <div className="hidden text-right sm:block space-y-0.5">
