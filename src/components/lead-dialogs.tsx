@@ -919,8 +919,9 @@ export function TemplateSuggester({ lead, status, scenario }: { lead: Lead; stat
       await recordTemplateUsage(lead.id, status, scenario, template.followup_order);
       toast.success('Message copied to clipboard!');
       queryClient.invalidateQueries({ queryKey: ['nextTemplate', lead.id, status, scenario] });
-    } catch (err) {
-      toast.error('Failed to copy message');
+    } catch (err: any) {
+      console.error("Template tracking failed:", err);
+      toast.error('Failed to copy message: ' + (err.message || 'Unknown error'));
     }
   };
 

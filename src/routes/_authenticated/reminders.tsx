@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, StatCard, StatCardSkeleton, StatusPill, BniDateDisplay } from "@/components/crm-ui";
 import { useCrmRefresh, SmartActionDialog, LeadHistoryDialog, toLocalInputValue } from "@/components/lead-dialogs";
+import { QuickMessageMenu } from "@/components/QuickMessageMenu";
 import { ACTIVITY_LABEL, telHref, waHref, ACTION_CONFIG, type Lead, type Reminder, type LeadStatus, type Activity } from "@/lib/crm";
 import {
   cancelReminder,
@@ -480,6 +481,7 @@ function ReminderCard({
                 >
                   <Phone className="size-3.5" /> Call
                 </a>
+                <QuickMessageMenu lead={lead} />
                 <a
                   href={waHref(lead.phone, `Hi${lead.name ? ` ${lead.name.split(" ")[0]}` : ""}, this is Crewvia BNI.`)}
                   target="_blank"

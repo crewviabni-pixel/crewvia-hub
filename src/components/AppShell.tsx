@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, BellRing, LogOut, Plus, Settings, Users } from "lucide-react";
+import { BarChart3, BellRing, LogOut, MessageCircle, Plus, Settings, Users } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,7 @@ const NAV = [
   { to: "/leads", label: "Leads", icon: Users },
   { to: "/add-lead", label: "Add", icon: Plus },
   { to: "/reminders", label: "Reminders", icon: BellRing },
+  { to: "/templates", label: "Templates", icon: MessageCircle },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
 ] as const;
 
