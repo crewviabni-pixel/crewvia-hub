@@ -30,7 +30,7 @@ function OutboxScreen() {
       return inboxLeads.filter(lead => {
         // Only show if there is no active work item for this exact stage
         const expectedType = lead.status === "info_taken" ? "draft" : "presentation";
-        const hasActiveWork = lead.work_items.some((w: any) => w.type === expectedType && w.status !== "completed");
+        const hasActiveWork = (lead.work_items || []).some((w: any) => w.type === expectedType);
         return !hasActiveWork;
       });
     }

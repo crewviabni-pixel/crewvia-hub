@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useRouteContext } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { BarChart3, BellRing, LogOut, MessageCircle, Plus, Settings, Users, Inbox, Briefcase, Shield } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -25,6 +25,26 @@ export function AppShell({
   const queryClient = useQueryClient();
   const context = useRouteContext({ strict: false }) as any;
   const appRole = context?.appRole || 'designer';
+
+    const { data: inboxCount = 0 } = useQuery({
+    queryKey: ["inboxCount"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("leads")
+        .select(`*, work_items(*)`)
+        .in("status", ["info_taken", "advance_received"]);
+      
+      if (!data) return 0;
+      
+      return data.filter(lead => {
+        const expectedType = lead.status === "info_taken" ? "draft" : "presentation";
+        const hasWork = (lead.work_items || []).some((w: any) => w.type === expectedType);
+        return !hasWork;
+      }).length;
+    },
+    enabled: appRole === 'admin',
+    refetchInterval: 30000
+  });
 
   let navItems = [];
   if (appRole === 'admin') {
