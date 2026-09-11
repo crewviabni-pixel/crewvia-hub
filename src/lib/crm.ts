@@ -6,12 +6,27 @@ export type Reminder = Database["public"]["Tables"]["reminders"]["Row"];
 export type Payment = Database["public"]["Tables"]["payments"]["Row"];
 export type MessageTemplate = Database["public"]["Tables"]["message_templates"]["Row"];
 export type LeadTemplateProgress = Database["public"]["Tables"]["lead_template_progress"]["Row"];
+export type UserRole = Database["public"]["Tables"]["user_roles"]["Row"];
+export interface LeadInformation {
+  id: string;
+  lead_id: string;
+  project_name?: string;
+  info_text: string;
+  created_at: string;
+  updated_at: string;
+}
+export type LeadInformationImage = Database["public"]["Tables"]["lead_information_images"]["Row"];
+export type WorkItem = Database["public"]["Tables"]["work_items"]["Row"];
+export type DesignerLead = Database["public"]["Views"]["designer_leads_view"]["Row"];
 
 export type LeadStatus = Database["public"]["Enums"]["lead_status"];
 export type PaymentStatus = Database["public"]["Enums"]["payment_status"];
 export type PaymentCategory = Database["public"]["Enums"]["payment_category"];
 export type CallOutcome = Database["public"]["Enums"]["call_outcome"];
 export type ActivityKind = Database["public"]["Enums"]["activity_kind"];
+export type AppRole = Database["public"]["Enums"]["app_role"];
+export type WorkType = Database["public"]["Enums"]["work_type"];
+export type WorkStatus = Database["public"]["Enums"]["work_status"];
 
 export const LEAD_STATUSES: { value: LeadStatus; label: string; tone: string }[] = [
   { value: "take_info", label: "Take Info", tone: "bg-sky-100 text-sky-900 border-sky-300" },

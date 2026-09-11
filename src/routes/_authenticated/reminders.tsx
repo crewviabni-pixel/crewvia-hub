@@ -2,10 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { format, isToday } from "date-fns";
-import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2, List } from "lucide-react";
+import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2, List, Pin, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/AppShell";
+import { supabase } from "@/integrations/supabase/client";
 import { EmptyState, StatCard, StatCardSkeleton, StatusPill, BniDateDisplay } from "@/components/crm-ui";
 import { useCrmRefresh, SmartActionDialog, LeadHistoryDialog, toLocalInputValue } from "@/components/lead-dialogs";
 import { QuickMessageMenu } from "@/components/QuickMessageMenu";
@@ -59,11 +60,13 @@ function RemindersPage() {
   const lq = useQuery({ queryKey: ["leads"], queryFn: fetchLeads });
   const aq = useQuery({ queryKey: ["activities"], queryFn: () => fetchActivities() });
   const rq = useQuery({ queryKey: ["reminders"], queryFn: fetchReminders });
+  const wq = useQuery({ queryKey: ["workItemsCompleted"], queryFn: async () => { const { data } = await supabase.from("work_items").select("*").eq("status", "completed"); return data || []; } });
 
-  const isLoading = lq.isLoading || aq.isLoading || rq.isLoading;
+  const isLoading = lq.isLoading || aq.isLoading || rq.isLoading || wq.isLoading;
   const reminders = rq.data || [];
   const leads = lq.data || [];
   const activities = aq.data || [];
+  const completedWorks = wq.data || [];
 
   const done = useMutation({
     mutationFn: (r: Reminder) => completeReminder(r),
@@ -104,7 +107,23 @@ function RemindersPage() {
   const pending = reminders.filter((r) => r.state === "pending");
   const buckets = COLUMNS.map((col) => ({
     col,
-    items: pending.filter((r) => bucketOf(new Date(r.due_at)) === col),
+    items: pending.filter((r) => {
+      const rLead = leadMap.get(r.lead_id);
+      const isPinned = completedWorks.some(w => 
+        w.lead_id === r.lead_id && 
+        ((w.type === 'draft' && rLead?.status === 'info_taken') || 
+         (w.type === 'presentation' && rLead?.status === 'advance_received'))
+      );
+      
+      const originalBucket = bucketOf(new Date(r.due_at));
+      
+      // If it's pinned, and it's NOT overdue, force it into Today so it's immediately visible
+      if (isPinned && originalBucket !== "Overdue") {
+        return col === "Today";
+      }
+      
+      return originalBucket === col;
+    }),
   }));
 
   const todayActivities = activities.filter((a) => isToday(new Date(a.created_at)));
@@ -170,6 +189,7 @@ function RemindersPage() {
                 items={buckets.find((b) => b.col === activeTab)?.items || []}
                 leadMap={leadMap}
                 activities={activities}
+                completedWorks={completedWorks}
                 onDone={(r, lead) => setCompleting({ r, lead })}
                 snooze={snooze}
                 onDelete={(r) => deleteMut.mutate(r)}
@@ -237,6 +257,7 @@ function TimelineView({
   items,
   leadMap,
   activities,
+  completedWorks,
   onDone,
   snooze,
   onDelete,
@@ -246,6 +267,7 @@ function TimelineView({
   items: Reminder[];
   leadMap: Map<string, Lead>;
   activities: Activity[];
+  completedWorks: any[];
   onDone: (r: Reminder, lead?: Lead) => void;
   snooze: any;
   onDelete: (r: Reminder) => void;
@@ -255,11 +277,28 @@ function TimelineView({
   if (items.length === 0) {
     return <EmptyState title="All clear" body="No reminders for this time period." />;
   }
+  // Sort by completed work then time ascending
+  const sorted = [...items].sort((a, b) => {
+    const aLead = leadMap.get(a.lead_id);
+    const bLead = leadMap.get(b.lead_id);
+    
+    const aHasCompletedWork = completedWorks.some(w => 
+      w.lead_id === a.lead_id && 
+      ((w.type === 'draft' && aLead?.status === 'info_taken') || 
+       (w.type === 'presentation' && aLead?.status === 'advance_received'))
+    );
+    
+    const bHasCompletedWork = completedWorks.some(w => 
+      w.lead_id === b.lead_id && 
+      ((w.type === 'draft' && bLead?.status === 'info_taken') || 
+       (w.type === 'presentation' && bLead?.status === 'advance_received'))
+    );
+    
+    if (aHasCompletedWork && !bHasCompletedWork) return -1;
+    if (!aHasCompletedWork && bHasCompletedWork) return 1;
+    return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+  });
 
-  // Sort by time ascending
-  const sorted = [...items].sort(
-    (a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime()
-  );
 
   return (
     <div className="relative border-l-2 border-border/60 ml-12 sm:ml-16 py-4 space-y-6">
@@ -277,16 +316,26 @@ function TimelineView({
                 {time}
               </span>
             </div>
-            <ReminderCard
-              reminder={r}
-              lead={lead}
+            {(() => {
+              const pinnedWork = completedWorks.find(w => 
+                w.lead_id === r.lead_id && 
+                ((w.type === 'draft' && lead?.status === 'info_taken') || 
+                 (w.type === 'presentation' && lead?.status === 'advance_received'))
+              );
+              return (
+                <ReminderCard
+                  reminder={r}
+                  lead={lead}
+                  pinnedType={pinnedWork ? pinnedWork.type : null}
               lastActivity={lastActivity ?? null}
               onDone={() => onDone(r, lead)}
               onSnooze={(hours) => snooze.mutate({ r: r, hours })}
               onDelete={() => onDelete(r)}
               onEdit={(title, dueAt) => onEdit(r, title, dueAt)}
               onShowHistory={() => lead && onShowHistory(lead)}
-            />
+                />
+              );
+            })()}
           </div>
         );
       })}
@@ -326,6 +375,7 @@ function ReminderCard({
   onDelete,
   onEdit,
   onShowHistory,
+  pinnedType,
 }: {
   reminder: Reminder;
   lead: Lead | undefined;
@@ -335,6 +385,7 @@ function ReminderCard({
   onDelete: () => void;
   onEdit: (title: string, dueAt: string) => void;
   onShowHistory: () => void;
+  pinnedType?: "draft" | "presentation" | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(reminder.title);
@@ -344,8 +395,13 @@ function ReminderCard({
     "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
 
   return (
-    <article className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
-      <div className="mb-2 flex items-start justify-between gap-3">
+    <article className={`relative overflow-hidden rounded-xl border ${pinnedType ? "border-accent shadow-md bg-accent/5" : "border-border bg-card"} p-4 shadow-sm transition-shadow hover:shadow-md`}>
+      {pinnedType && (
+        <div className="absolute top-0 left-0 bg-accent text-accent-foreground px-2 py-0.5 rounded-br-lg flex items-center gap-1 shadow-sm">
+          <Pin className="w-3 h-3 fill-current" />
+        </div>
+      )}
+      <div className={`mb-2 flex items-start justify-between gap-3 ${pinnedType ? 'pt-2' : ''}`}>
         <div className="flex-1 min-w-0">
           {editing ? (
             <input
@@ -368,6 +424,12 @@ function ReminderCard({
               </Link>
             </div>
           ) : null}
+          {pinnedType && (
+             <div className="mt-2 flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md w-fit">
+               <BadgeCheck className="w-4 h-4" />
+               <span className="text-[11px] font-bold uppercase tracking-wider">{pinnedType === 'draft' ? 'Draft Ready' : 'Presentation Ready'}</span>
+             </div>
+          )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {!editing && lead?.status && <StatusPill status={lead.status} />}

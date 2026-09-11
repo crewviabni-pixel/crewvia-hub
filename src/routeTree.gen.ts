@@ -13,9 +13,12 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedAddLeadRouteImport } from './routes/_authenticated/add-lead'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
+import { Route as AuthenticatedDesignersRouteImport } from './routes/_authenticated/designers'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
+import { Route as AuthenticatedOutboxRouteImport } from './routes/_authenticated/outbox'
 import { Route as AuthenticatedRemindersRouteImport } from './routes/_authenticated/reminders'
 import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
+import { Route as AuthenticatedWorkRouteImport } from './routes/_authenticated/work'
 import { Route as AuthenticatedLeadsLeadIdRouteImport } from './routes/_authenticated/leads.$leadId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -37,9 +40,19 @@ const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDesignersRoute = AuthenticatedDesignersRouteImport.update({
+  id: '/designers',
+  path: '/designers',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
   id: '/leads',
   path: '/leads',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedOutboxRoute = AuthenticatedOutboxRouteImport.update({
+  id: '/outbox',
+  path: '/outbox',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedRemindersRoute = AuthenticatedRemindersRouteImport.update({
@@ -50,6 +63,11 @@ const AuthenticatedRemindersRoute = AuthenticatedRemindersRouteImport.update({
 const AuthenticatedTemplatesRoute = AuthenticatedTemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedWorkRoute = AuthenticatedWorkRouteImport.update({
+  id: '/work',
+  path: '/work',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedLeadsLeadIdRoute =
@@ -63,18 +81,24 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/add-lead': typeof AuthenticatedAddLeadRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
+  '/designers': typeof AuthenticatedDesignersRoute
   '/leads': typeof AuthenticatedLeadsRouteWithChildren
+  '/outbox': typeof AuthenticatedOutboxRoute
   '/reminders': typeof AuthenticatedRemindersRoute
   '/templates': typeof AuthenticatedTemplatesRoute
+  '/work': typeof AuthenticatedWorkRoute
   '/leads/$leadId': typeof AuthenticatedLeadsLeadIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/add-lead': typeof AuthenticatedAddLeadRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
+  '/designers': typeof AuthenticatedDesignersRoute
   '/leads': typeof AuthenticatedLeadsRouteWithChildren
+  '/outbox': typeof AuthenticatedOutboxRoute
   '/reminders': typeof AuthenticatedRemindersRoute
   '/templates': typeof AuthenticatedTemplatesRoute
+  '/work': typeof AuthenticatedWorkRoute
   '/leads/$leadId': typeof AuthenticatedLeadsLeadIdRoute
 }
 export interface FileRoutesById {
@@ -83,9 +107,12 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/add-lead': typeof AuthenticatedAddLeadRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
+  '/_authenticated/designers': typeof AuthenticatedDesignersRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRouteWithChildren
+  '/_authenticated/outbox': typeof AuthenticatedOutboxRoute
   '/_authenticated/reminders': typeof AuthenticatedRemindersRoute
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
+  '/_authenticated/work': typeof AuthenticatedWorkRoute
   '/_authenticated/leads/$leadId': typeof AuthenticatedLeadsLeadIdRoute
 }
 export interface FileRouteTypes {
@@ -94,18 +121,24 @@ export interface FileRouteTypes {
     | '/'
     | '/add-lead'
     | '/analytics'
+    | '/designers'
     | '/leads'
+    | '/outbox'
     | '/reminders'
     | '/templates'
+    | '/work'
     | '/leads/$leadId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/add-lead'
     | '/analytics'
+    | '/designers'
     | '/leads'
+    | '/outbox'
     | '/reminders'
     | '/templates'
+    | '/work'
     | '/leads/$leadId'
   id:
     | '__root__'
@@ -113,9 +146,12 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/_authenticated/add-lead'
     | '/_authenticated/analytics'
+    | '/_authenticated/designers'
     | '/_authenticated/leads'
+    | '/_authenticated/outbox'
     | '/_authenticated/reminders'
     | '/_authenticated/templates'
+    | '/_authenticated/work'
     | '/_authenticated/leads/$leadId'
   fileRoutesById: FileRoutesById
 }
@@ -154,11 +190,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/designers': {
+      id: '/_authenticated/designers'
+      path: '/designers'
+      fullPath: '/designers'
+      preLoaderRoute: typeof AuthenticatedDesignersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/leads': {
       id: '/_authenticated/leads'
       path: '/leads'
       fullPath: '/leads'
       preLoaderRoute: typeof AuthenticatedLeadsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/outbox': {
+      id: '/_authenticated/outbox'
+      path: '/outbox'
+      fullPath: '/outbox'
+      preLoaderRoute: typeof AuthenticatedOutboxRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/reminders': {
@@ -173,6 +223,13 @@ declare module '@tanstack/react-router' {
       path: '/templates'
       fullPath: '/templates'
       preLoaderRoute: typeof AuthenticatedTemplatesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/work': {
+      id: '/_authenticated/work'
+      path: '/work'
+      fullPath: '/work'
+      preLoaderRoute: typeof AuthenticatedWorkRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/leads/$leadId': {
@@ -199,17 +256,23 @@ const AuthenticatedLeadsRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAddLeadRoute: typeof AuthenticatedAddLeadRoute
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
+  AuthenticatedDesignersRoute: typeof AuthenticatedDesignersRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRouteWithChildren
+  AuthenticatedOutboxRoute: typeof AuthenticatedOutboxRoute
   AuthenticatedRemindersRoute: typeof AuthenticatedRemindersRoute
   AuthenticatedTemplatesRoute: typeof AuthenticatedTemplatesRoute
+  AuthenticatedWorkRoute: typeof AuthenticatedWorkRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAddLeadRoute: AuthenticatedAddLeadRoute,
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
+  AuthenticatedDesignersRoute: AuthenticatedDesignersRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRouteWithChildren,
+  AuthenticatedOutboxRoute: AuthenticatedOutboxRoute,
   AuthenticatedRemindersRoute: AuthenticatedRemindersRoute,
   AuthenticatedTemplatesRoute: AuthenticatedTemplatesRoute,
+  AuthenticatedWorkRoute: AuthenticatedWorkRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

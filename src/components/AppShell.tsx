@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouteContext } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, BellRing, LogOut, MessageCircle, Plus, Settings, Users } from "lucide-react";
+import { BarChart3, BellRing, LogOut, MessageCircle, Plus, Settings, Users, Inbox, Briefcase, Shield } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -9,14 +9,6 @@ import { cn } from "@/lib/utils";
 import { requestNotificationPermission } from "@/lib/firebase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-
-const NAV = [
-  { to: "/leads", label: "Leads", icon: Users },
-  { to: "/add-lead", label: "Add", icon: Plus },
-  { to: "/reminders", label: "Reminders", icon: BellRing },
-  { to: "/templates", label: "Templates", icon: MessageCircle },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-] as const;
 
 export function AppShell({
   title,
@@ -31,6 +23,25 @@ export function AppShell({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const context = useRouteContext({ strict: false }) as any;
+  const appRole = context?.appRole || 'designer';
+
+  let navItems = [];
+  if (appRole === 'admin') {
+    navItems = [
+      { to: "/leads", label: "Leads", icon: Users },
+      { to: "/add-lead", label: "Add", icon: Plus },
+      { to: "/reminders", label: "Reminders", icon: BellRing },
+      { to: "/work", label: "Work", icon: Briefcase },
+      { to: "/templates", label: "Templates", icon: MessageCircle },
+      { to: "/analytics", label: "Analytics", icon: BarChart3 },
+      { to: "/designers", label: "Designers", icon: Shield },
+    ];
+  } else {
+    navItems = [
+      { to: "/work", label: "Work", icon: Briefcase },
+    ];
+  }
 
   async function signOut() {
     await queryClient.cancelQueries();
@@ -43,7 +54,7 @@ export function AppShell({
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <Link to="/leads" className="flex items-center gap-2">
+          <Link to={(appRole === 'admin' ? "/leads" : "/work") as any} className="flex items-center gap-2">
             <div className="grid size-8 place-items-center">
               <img src="/logo.png" alt="Crewvia Logo" className="size-full object-contain" />
             </div>
@@ -51,7 +62,7 @@ export function AppShell({
           </Link>
 
           <nav className="ml-4 hidden items-center gap-1 md:flex">
-            {NAV.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
@@ -65,6 +76,11 @@ export function AppShell({
 
           <div className="ml-auto flex items-center gap-2">
             {actions}
+            {appRole === 'admin' && (
+              <Link to="/outbox" className="inline-flex items-center justify-center rounded-md border border-border bg-card px-2.5 py-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
+                <Inbox className="size-4" />
+              </Link>
+            )}
             <SettingsDialog />
             <button
               onClick={signOut}
@@ -85,13 +101,13 @@ export function AppShell({
         {children}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border bg-card md:hidden">
-        {NAV.map((item) => (
+      <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-border bg-card md:hidden">
+        {navItems.map((item) => (
           <Link
             key={item.to}
             to={item.to}
             className={cn(
-              "flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium text-muted-foreground",
+              "flex min-w-[72px] flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium text-muted-foreground",
             )}
             activeProps={{ className: "text-accent-foreground bg-sidebar-accent" }}
           >

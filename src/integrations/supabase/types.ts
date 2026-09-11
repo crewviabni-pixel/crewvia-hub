@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -50,6 +70,127 @@ export type Database = {
             foreignKeyName: "activities_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
+            referencedRelation: "designer_leads_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_information: {
+        Row: {
+          created_at: string
+          info_text: string
+          lead_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          info_text: string
+          lead_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          info_text?: string
+          lead_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_information_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "designer_leads_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_information_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_information_images: {
+        Row: {
+          created_at: string
+          file_url: string
+          id: string
+          lead_id: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          file_url: string
+          id?: string
+          lead_id: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          file_url?: string
+          id?: string
+          lead_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_information_images_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "designer_leads_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_information_images_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_template_progress: {
+        Row: {
+          last_order_used: number
+          lead_id: string
+          scenario: Database["public"]["Enums"]["call_outcome"]
+          status: Database["public"]["Enums"]["lead_status"]
+          updated_at: string
+        }
+        Insert: {
+          last_order_used: number
+          lead_id: string
+          scenario: Database["public"]["Enums"]["call_outcome"]
+          status: Database["public"]["Enums"]["lead_status"]
+          updated_at?: string
+        }
+        Update: {
+          last_order_used?: number
+          lead_id?: string
+          scenario?: Database["public"]["Enums"]["call_outcome"]
+          status?: Database["public"]["Enums"]["lead_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_template_progress_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "designer_leads_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_template_progress_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
@@ -57,8 +198,8 @@ export type Database = {
       }
       leads: {
         Row: {
-          bni_presentation_date: string | null
           amount_paid: number
+          bni_presentation_date: string | null
           call_count: number
           city: string | null
           company: string | null
@@ -83,8 +224,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          bni_presentation_date?: string | null
           amount_paid?: number
+          bni_presentation_date?: string | null
           call_count?: number
           city?: string | null
           company?: string | null
@@ -109,8 +250,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          bni_presentation_date?: string | null
           amount_paid?: number
+          bni_presentation_date?: string | null
           call_count?: number
           city?: string | null
           company?: string | null
@@ -136,38 +277,81 @@ export type Database = {
         }
         Relationships: []
       }
+      message_templates: {
+        Row: {
+          created_at: string
+          followup_order: number
+          id: string
+          is_active: boolean
+          message: string
+          name: string
+          scenario: Database["public"]["Enums"]["call_outcome"]
+          status: Database["public"]["Enums"]["lead_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          followup_order?: number
+          id?: string
+          is_active?: boolean
+          message: string
+          name: string
+          scenario: Database["public"]["Enums"]["call_outcome"]
+          status: Database["public"]["Enums"]["lead_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          followup_order?: number
+          id?: string
+          is_active?: boolean
+          message?: string
+          name?: string
+          scenario?: Database["public"]["Enums"]["call_outcome"]
+          status?: Database["public"]["Enums"]["lead_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount: number
+          category: Database["public"]["Enums"]["payment_category"] | null
           created_at: string
           id: string
           lead_id: string
           method: string
           note: string | null
           paid_at: string
-          category: Database["public"]["Enums"]["payment_category"] | null
         }
         Insert: {
           amount: number
+          category?: Database["public"]["Enums"]["payment_category"] | null
           created_at?: string
           id?: string
           lead_id: string
           method?: string
           note?: string | null
           paid_at?: string
-          category?: Database["public"]["Enums"]["payment_category"] | null
         }
         Update: {
           amount?: number
+          category?: Database["public"]["Enums"]["payment_category"] | null
           created_at?: string
           id?: string
           lead_id?: string
           method?: string
           note?: string | null
           paid_at?: string
-          category?: Database["public"]["Enums"]["payment_category"] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "designer_leads_view"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payments_lead_id_fkey"
             columns: ["lead_id"]
@@ -216,82 +400,158 @@ export type Database = {
             foreignKeyName: "reminders_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
+            referencedRelation: "designer_leads_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reminders_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
         ]
       }
-      message_templates: {
+      user_roles: {
         Row: {
-          id: string
-          name: string
-          message: string
-          status: Database["public"]["Enums"]["lead_status"]
-          scenario: Database["public"]["Enums"]["call_outcome"]
-          followup_order: number
-          is_active: boolean
           created_at: string
-          updated_at: string
+          is_suspended: boolean
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+          username: string
         }
         Insert: {
-          id?: string
-          name: string
-          message: string
-          status: Database["public"]["Enums"]["lead_status"]
-          scenario: Database["public"]["Enums"]["call_outcome"]
-          followup_order?: number
-          is_active?: boolean
           created_at?: string
-          updated_at?: string
+          is_suspended?: boolean
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+          username: string
         }
         Update: {
-          id?: string
-          name?: string
-          message?: string
-          status?: Database["public"]["Enums"]["lead_status"]
-          scenario?: Database["public"]["Enums"]["call_outcome"]
-          followup_order?: number
-          is_active?: boolean
           created_at?: string
-          updated_at?: string
+          is_suspended?: boolean
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+          username?: string
         }
         Relationships: []
       }
-      lead_template_progress: {
+      work_items: {
         Row: {
+          created_at: string
+          file_url: string | null
+          id: string
           lead_id: string
-          status: Database["public"]["Enums"]["lead_status"]
-          scenario: Database["public"]["Enums"]["call_outcome"]
-          last_order_used: number
+          status: Database["public"]["Enums"]["work_status"]
+          type: Database["public"]["Enums"]["work_type"]
           updated_at: string
         }
         Insert: {
+          created_at?: string
+          file_url?: string | null
+          id?: string
           lead_id: string
-          status: Database["public"]["Enums"]["lead_status"]
-          scenario: Database["public"]["Enums"]["call_outcome"]
-          last_order_used: number
+          status?: Database["public"]["Enums"]["work_status"]
+          type: Database["public"]["Enums"]["work_type"]
           updated_at?: string
         }
         Update: {
+          created_at?: string
+          file_url?: string | null
+          id?: string
           lead_id?: string
-          status?: Database["public"]["Enums"]["lead_status"]
-          scenario?: Database["public"]["Enums"]["call_outcome"]
-          last_order_used?: number
+          status?: Database["public"]["Enums"]["work_status"]
+          type?: Database["public"]["Enums"]["work_type"]
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "lead_template_progress_lead_id_fkey"
+            foreignKeyName: "work_items_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "designer_leads_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_items_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
     }
     Views: {
-      [_ in never]: never
+      designer_leads_view: {
+        Row: {
+          bni_presentation_date: string | null
+          call_count: number | null
+          city: string | null
+          company: string | null
+          converted_at: string | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          last_call_at: string | null
+          last_call_outcome: Database["public"]["Enums"]["call_outcome"] | null
+          last_contacted_at: string | null
+          lost_reason: string | null
+          name: string | null
+          next_reminder_at: string | null
+          notes: string | null
+          owner_id: string | null
+          service: string | null
+          source: string | null
+          status: Database["public"]["Enums"]["lead_status"] | null
+          updated_at: string | null
+        }
+        Insert: {
+          bni_presentation_date?: string | null
+          call_count?: number | null
+          city?: string | null
+          company?: string | null
+          converted_at?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          last_call_at?: string | null
+          last_call_outcome?: Database["public"]["Enums"]["call_outcome"] | null
+          last_contacted_at?: string | null
+          lost_reason?: string | null
+          name?: string | null
+          next_reminder_at?: string | null
+          notes?: string | null
+          owner_id?: string | null
+          service?: string | null
+          source?: string | null
+          status?: Database["public"]["Enums"]["lead_status"] | null
+          updated_at?: string | null
+        }
+        Update: {
+          bni_presentation_date?: string | null
+          call_count?: number | null
+          city?: string | null
+          company?: string | null
+          converted_at?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          last_call_at?: string | null
+          last_call_outcome?: Database["public"]["Enums"]["call_outcome"] | null
+          last_contacted_at?: string | null
+          lost_reason?: string | null
+          name?: string | null
+          next_reminder_at?: string | null
+          notes?: string | null
+          owner_id?: string | null
+          service?: string | null
+          source?: string | null
+          status?: Database["public"]["Enums"]["lead_status"] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
@@ -308,7 +568,7 @@ export type Database = {
         | "reminder_snoozed"
         | "field_update"
         | "whatsapp"
-      payment_category: "advance" | "partial" | "full"
+      app_role: "admin" | "designer"
       call_outcome:
         | "connected"
         | "no_answer"
@@ -325,8 +585,11 @@ export type Database = {
         | "presentation_sent"
         | "converted"
         | "lost"
+      payment_category: "advance" | "partial" | "full"
       payment_status: "unpaid" | "partial" | "paid"
       reminder_state: "pending" | "done" | "snoozed" | "cancelled"
+      work_status: "pending" | "in_progress" | "completed"
+      work_type: "draft" | "presentation"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -452,6 +715,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       activity_kind: [
@@ -466,6 +732,7 @@ export const Constants = {
         "field_update",
         "whatsapp",
       ],
+      app_role: ["admin", "designer"],
       call_outcome: [
         "connected",
         "no_answer",
@@ -484,8 +751,12 @@ export const Constants = {
         "converted",
         "lost",
       ],
+      payment_category: ["advance", "partial", "full"],
       payment_status: ["unpaid", "partial", "paid"],
       reminder_state: ["pending", "done", "snoozed", "cancelled"],
+      work_status: ["pending", "in_progress", "completed"],
+      work_type: ["draft", "presentation"],
     },
   },
 } as const
+

@@ -46,13 +46,13 @@ function SignIn() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (username.trim().toLowerCase() !== USERNAME) {
-      setError("Incorrect username or password.");
-      return;
-    }
+    if (!username.trim() || !password) return;
+    
     setBusy(true);
+    const loginEmail = username.trim().toLowerCase() === USERNAME ? ACCOUNT_EMAIL : `${username.trim().toLowerCase()}@crewviabni.com`;
+    
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: ACCOUNT_EMAIL,
+      email: loginEmail,
       password,
     });
     setBusy(false);
