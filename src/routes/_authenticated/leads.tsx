@@ -53,8 +53,10 @@ function LeadsList() {
 
     const rows = leads.filter((lead) => {
       if (term) {
-        const hay = `${lead.name} ${lead.phone} ${lead.company ?? ""} ${lead.city ?? ""} ${lead.service ?? ""}`.toLowerCase();
-        if (!hay.includes(term)) return false;
+        const hay = `${lead.name || ""} ${lead.phone || ""} ${lead.company || ""} ${lead.city || ""} ${lead.service || ""}`.toLowerCase();
+        const strippedTerm = term.replace(/\s+/g, "");
+        const strippedHay = hay.replace(/\s+/g, "");
+        if (!hay.includes(term) && !strippedHay.includes(strippedTerm)) return false;
       }
       if (status !== "all" && lead.status !== status) return false;
       if (payment !== "all" && lead.payment_status !== payment) return false;

@@ -40,7 +40,8 @@ export async function saveInformation(
   leadName: string,
   infoText: string, 
   images: { title: string, file_url: string }[],
-  leadStatus: string
+  leadStatus: string,
+  editOnly: boolean = false
 ) {
   // 1. Update Lead Name
   if (leadName.trim()) {
@@ -66,6 +67,7 @@ export async function saveInformation(
   }
 
   // 4. Create Work Item based on status
+  if (editOnly) return;
   const workType = leadStatus === "info_taken" ? "draft" : "presentation";
   
   // Check if work item already exists
@@ -163,4 +165,14 @@ export async function fetchAllCompletedWorkItems() {
     ...row,
     lead: row.designer_leads_view
   }));
+}
+
+export async function fetchAllWorkItemsForLead(leadId: string) {
+  const { data, error } = await supabase
+    .from("work_items")
+    .select("*")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
 }

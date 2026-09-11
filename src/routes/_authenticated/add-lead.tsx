@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -7,7 +7,8 @@ import { AppShell } from "@/components/AppShell";
 import { presetDates, toLocalInputValue, useCrmRefresh } from "@/components/lead-dialogs";
 import { LEAD_SOURCES, LEAD_STATUSES, type LeadStatus } from "@/lib/crm";
 import { createLead } from "@/lib/crm-api";
-
+import { supabase } from "@/integrations/supabase/client";
+import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 export const Route = createFileRoute("/_authenticated/add-lead")({
   head: () => ({
     meta: [
@@ -31,6 +32,7 @@ function AddLead() {
   const navigate = useNavigate();
   const refresh = useCrmRefresh();
 
+
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -43,6 +45,18 @@ function AddLead() {
     deal_value: "",
     notes: "",
     bni_presentation_date: "",
+  });
+  const cleanPhone = form.phone.replace(/\D/g, "");
+  const isPhoneValid = cleanPhone.length === 10;
+  
+  const { data: isDuplicate, isFetching: isCheckingPhone } = useQuery({
+    queryKey: ["checkPhone", cleanPhone],
+    queryFn: async () => {
+      const { data } = await supabase.from("leads").select("phone");
+      if (!data) return false;
+      return data.some(d => d.phone && d.phone.replace(/\D/g, "") === cleanPhone);
+    },
+    enabled: isPhoneValid,
   });
 
   // Hydrate default price from localStorage on client mount (SSR can't access localStorage)
@@ -57,7 +71,8 @@ function AddLead() {
 
   const save = useMutation({
     mutationFn: async () => {
-      if (form.phone.replace(/\D/g, "").length < 7) throw new Error("Enter a valid phone number");
+      if (cleanPhone.length !== 10) throw new Error("Phone number must be exactly 10 digits.");
+      if (isDuplicate) throw new Error("Phone number already exists in database.");
       
       let finalDealValue = Number(form.deal_value);
       if (!finalDealValue) {
@@ -97,17 +112,31 @@ function AddLead() {
         }}
         className="grid gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-2"
       >
-        <Labelled label="Name *">
+        <Labelled label="Name">
           <input className={fieldClass} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Full name" />
         </Labelled>
         <Labelled label="Phone *">
-          <input
-            className={fieldClass}
-            inputMode="tel"
-            value={form.phone}
-            onChange={(e) => set("phone", e.target.value)}
-            placeholder="98765 43210"
-          />
+          <div className="relative">
+            <input
+              className={fieldClass}
+              inputMode="tel"
+              value={form.phone}
+              onChange={(e) => set("phone", e.target.value)}
+              placeholder="98765 43210"
+            />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+              {isCheckingPhone && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {!isCheckingPhone && isPhoneValid && isDuplicate && (
+                <XCircle className="h-5 w-5 text-destructive" />
+              )}
+              {!isCheckingPhone && isPhoneValid && !isDuplicate && (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              )}
+            </div>
+          </div>
+          {isPhoneValid && isDuplicate && (
+             <p className="text-xs text-destructive mt-1">This phone number already exists.</p>
+          )}
         </Labelled>
         <Labelled label="Company">
           <input className={fieldClass} value={form.company} onChange={(e) => set("company", e.target.value)} />
@@ -184,7 +213,7 @@ function AddLead() {
         <div className="sm:col-span-2">
           <button
             type="submit"
-            disabled={save.isPending}
+            disabled={save.isPending || !isPhoneValid || isDuplicate}
             className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground disabled:opacity-60 sm:w-auto sm:px-8"
           >
             {save.isPending ? "Saving…" : "Save lead"}

@@ -84,6 +84,16 @@ function LeadDetail() {
     queryKey: ["activities", leadId],
     queryFn: () => fetchActivities(leadId),
   });
+  const { data: leadInfo } = useQuery({
+    queryKey: ["lead-info-images", leadId],
+    queryFn: () => fetchLeadInformation(leadId),
+    enabled: !!leadId,
+  });
+  const { data: workItems = [] } = useQuery({
+    queryKey: ["all-work-items", leadId],
+    queryFn: () => fetchAllWorkItemsForLead(leadId),
+    enabled: !!leadId,
+  });
   const { data: payments = [] } = useQuery({
     queryKey: ["payments", leadId],
     queryFn: () => fetchPayments(leadId),
@@ -377,6 +387,71 @@ function LeadDetail() {
                 ) : null}
               </dl>
             )}
+          </div>
+
+          
+          {/* Design Work & Information */}
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h2 className="mb-3 font-display text-base font-semibold">Design Work & Information</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Information</h4>
+                <div className="rounded-md bg-secondary p-4 text-sm whitespace-pre-wrap">
+                  {leadInfo?.info?.info_text || "No information provided."}
+                </div>
+              </div>
+              
+              <div>
+                   <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Reference Images</h4>
+                   {(!leadInfo?.images || leadInfo.images.length === 0) ? (
+                     <p className="text-sm text-muted-foreground">No reference images attached.</p>
+                   ) : (
+                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                       {leadInfo.images.map((img: any) => (
+                         <div key={img.id} className="relative rounded-lg border group overflow-hidden bg-muted aspect-square block">
+                           <img src={img.file_url} alt={img.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
+                             <p className="text-white text-xs truncate drop-shadow-md font-medium w-full text-center">
+                               {img.title}
+                             </p>
+                             <a href={img.file_url} target="_blank" rel="noreferrer" className="w-full bg-white/20 hover:bg-white/40 text-white rounded py-1 text-center text-xs backdrop-blur-sm transition-colors">
+                               View
+                             </a>
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                   )}
+                </div>
+
+              <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Work Files</h4>
+                  {(!workItems || workItems.length === 0) ? (
+                    <p className="text-sm text-muted-foreground">No work files have been requested yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {workItems.map((item: any) => (
+                        <div key={item.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                          <div>
+                            <p className="text-sm font-semibold capitalize">{item.type} <span className="text-xs font-normal text-muted-foreground ml-2">({item.status.replace("_", " ")})</span></p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{format(new Date(item.created_at), "d MMM yyyy, h:mm a")}</p>
+                          </div>
+                          {item.file_url && (
+                            <a 
+                              href={`${item.file_url}?download=${encodeURIComponent(lead.name || 'Lead')}-${item.type}.${item.file_url.split('.').pop()}`}
+                              download
+                              className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground"
+                            >
+                              <Download className="size-3.5" /> Download
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+            </div>
           </div>
 
           {/* timeline */}

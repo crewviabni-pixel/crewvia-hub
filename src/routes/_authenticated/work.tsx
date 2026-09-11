@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchWorkItems, updateWorkStatus, fetchLeadInformation } from "@/lib/work-api";
 import { WorkStatus, WorkType } from "@/lib/crm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { InformationModal } from "./outbox";
+import { Edit2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -130,6 +132,7 @@ function WorkCard({ item, appRole }: { item: any, appRole: string }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const { data: leadInfo } = useQuery({
     queryKey: ["lead-info-images", item.lead_id],
@@ -172,7 +175,8 @@ function WorkCard({ item, appRole }: { item: any, appRole: string }) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+    <Dialog open={open && !isEditing} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button className="flex flex-col items-start gap-2 rounded-lg border border-border bg-card p-3 text-left shadow-sm transition-all hover:border-accent">
           <div className="flex w-full items-start justify-between gap-2">
@@ -196,6 +200,15 @@ function WorkCard({ item, appRole }: { item: any, appRole: string }) {
         <DialogHeader>
           <DialogTitle>Work Details</DialogTitle>
         </DialogHeader>
+        {appRole === 'admin' && (
+          <button 
+            onClick={() => setIsEditing(true)} 
+            className="absolute right-12 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+          >
+            <Edit2 className="h-4 w-4" />
+            <span className="sr-only">Edit</span>
+          </button>
+        )}
         <div className="space-y-6 pt-2">
           <div>
             <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Lead Name</h4>
@@ -294,5 +307,9 @@ function WorkCard({ item, appRole }: { item: any, appRole: string }) {
         </div>
       </DialogContent>
     </Dialog>
+    {isEditing && (
+      <InformationModal lead={item.lead} onClose={() => setIsEditing(false)} editOnly={true} />
+    )}
+    </>
   );
 }

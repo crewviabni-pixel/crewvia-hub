@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useRouteContext } from "@tanstack/react-router";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { BarChart3, BellRing, LogOut, MessageCircle, Plus, Settings, Users, Inbox, Briefcase, Shield } from "lucide-react";
+import {  BarChart3, BellRing, LogOut, MessageCircle, Plus, Settings, Users, Inbox, Briefcase, Shield , FileText } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { supabase } from "@/integrations/supabase/client";

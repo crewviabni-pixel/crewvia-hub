@@ -93,7 +93,7 @@ function OutboxScreen() {
   );
 }
 
-function InformationModal({ lead, onClose }: { lead: any; onClose: () => void }) {
+export function InformationModal({ lead, onClose, editOnly = false }: { lead: any; onClose: () => void; editOnly?: boolean }) {
   const queryClient = useQueryClient();
   const [leadName, setLeadName] = useState(lead.name || "");
   const [infoText, setInfoText] = useState("");
@@ -129,11 +129,13 @@ function InformationModal({ lead, onClose }: { lead: any; onClose: () => void })
   const saveMutation = useMutation({
     mutationFn: async () => {
       const uploadedImages = await uploadImages();
-      await saveInformation(lead.id, leadName, infoText, uploadedImages, lead.status);
+      await saveInformation(lead.id, leadName, infoText, uploadedImages, lead.status, editOnly);
     },
     onSuccess: () => {
       toast.success("Information saved successfully");
       queryClient.invalidateQueries({ queryKey: ["outbox"] });
+        if (editOnly) queryClient.invalidateQueries({ queryKey: ["workItems"] });
+        queryClient.invalidateQueries({ queryKey: ["lead-info-images", lead.id] });
       onClose();
     },
     onError: (err: any) => {
