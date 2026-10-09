@@ -109,10 +109,10 @@ export function AiSummaryDialog({ lead, onClose }: AiSummaryDialogProps) {
           .map((a) => {
             const date = format(new Date(a.created_at), "MMM d, yyyy h:mm a");
             let details = "";
-            if (a.kind === "call") details = `Outcome: ${a.call_outcome || "unknown"}`;
-            else if (a.kind === "note") details = `Note: ${a.note || ""}`;
-            else if (a.kind === "message") details = `Template: ${a.template_type || "general"}`;
-            else if (a.kind === "status_change") details = `Status changed to: ${a.new_status || "unknown"}`;
+            if (a.kind === "call") details = `Outcome: ${(a.meta as any)?.call_outcome || "unknown"}`;
+            else if (a.kind === "note") details = `Note: ${a.detail || ""}`;
+            else if ((a.kind as string) === "message") details = `Template: ${(a.meta as any)?.template_type || "general"}`;
+            else if (a.kind === "status_change") details = `Status changed to: ${(a.meta as any)?.new_status || "unknown"}`;
             else if (a.kind === "payment") details = `Payment received`;
             else details = a.kind;
             return `[${date}] ${a.kind.toUpperCase()} - ${details}`;
