@@ -15,11 +15,13 @@ import {
 
 /* ---------------------------------- reads ----------------- */
 
-export async function fetchLeads(): Promise<Lead[]> {
-  const { data, error } = await supabase
+export async function fetchLeads(workspaceId?: string): Promise<Lead[]> {
+  let q = supabase
     .from("leads")
     .select("*")
     .order("updated_at", { ascending: false });
+  if (workspaceId) q = q.eq("workspace_id", workspaceId);
+  const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
 }
@@ -30,27 +32,31 @@ export async function fetchLead(id: string): Promise<Lead> {
   return data;
 }
 
-export async function fetchActivities(leadId?: string): Promise<Activity[]> {
-  let q = supabase.from("activities").select("*").order("created_at", { ascending: false });
+export async function fetchActivities(leadId?: string, workspaceId?: string): Promise<Activity[]> {
+  let q = supabase.from("activities").select("*, leads!inner(workspace_id)").order("created_at", { ascending: false });
   if (typeof leadId === "string") q = q.eq("lead_id", leadId);
+  else if (workspaceId) q = q.eq("leads.workspace_id", workspaceId).limit(300);
   else q = q.limit(300);
   const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
 }
 
-export async function fetchReminders(): Promise<Reminder[]> {
-  const { data, error } = await supabase
+export async function fetchReminders(workspaceId?: string): Promise<Reminder[]> {
+  let q = supabase
     .from("reminders")
-    .select("*")
+    .select("*, leads!inner(workspace_id)")
     .order("due_at", { ascending: true });
+  if (workspaceId) q = q.eq("leads.workspace_id", workspaceId);
+  const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
 }
 
-export async function fetchPayments(leadId?: string): Promise<Payment[]> {
-  let q = supabase.from("payments").select("*").order("paid_at", { ascending: false });
+export async function fetchPayments(leadId?: string, workspaceId?: string): Promise<Payment[]> {
+  let q = supabase.from("payments").select("*, leads!inner(workspace_id)").order("paid_at", { ascending: false });
   if (typeof leadId === "string") q = q.eq("lead_id", leadId);
+  else if (workspaceId) q = q.eq("leads.workspace_id", workspaceId);
   const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
@@ -90,6 +96,7 @@ export type NewLeadInput = {
   notes?: string;
   bni_presentation_date?: string | null;
   firstReminderAt?: string | null;
+  workspace_id?: string | null;
 };
 
 export async function createLead(input: NewLeadInput): Promise<Lead> {
@@ -104,6 +111,7 @@ export async function createLead(input: NewLeadInput): Promise<Lead> {
       service: rest.service || null,
       notes: rest.notes || null,
       next_reminder_at: firstReminderAt ?? null,
+      workspace_id: rest.workspace_id ?? null,
     })
     .select()
     .single();
@@ -385,13 +393,15 @@ async function syncNextReminder(leadId: string) {
 
 /* -------------------------------- templates -------------------------------- */
 
-export async function fetchMessageTemplates() {
-  const { data, error } = await supabase
+export async function fetchMessageTemplates(workspaceId?: string) {
+  let q = supabase
     .from("message_templates")
     .select("*")
     .order("status")
     .order("scenario")
     .order("followup_order");
+  if (workspaceId) q = q.eq("workspace_id", workspaceId);
+  const { data, error } = await q;
   if (error) throw error;
   return data;
 }

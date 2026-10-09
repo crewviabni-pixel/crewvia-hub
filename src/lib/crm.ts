@@ -18,6 +18,7 @@ export interface LeadInformation {
 export type LeadInformationImage = Database["public"]["Tables"]["lead_information_images"]["Row"];
 export type WorkItem = Database["public"]["Tables"]["work_items"]["Row"];
 export type DesignerLead = Database["public"]["Views"]["designer_leads_view"]["Row"];
+export type Workspace = Database["public"]["Tables"]["workspaces"]["Row"];
 
 export type LeadStatus = Database["public"]["Enums"]["lead_status"];
 export type PaymentStatus = Database["public"]["Enums"]["payment_status"];
@@ -148,8 +149,9 @@ export function telHref(phone: string) {
 }
 
 export function waHref(phone: string, text?: string) {
-  const base = `https://wa.me/${waNumber(phone)}`;
-  return text ? `${base}?text=${encodeURIComponent(text)}` : base;
+  const params = new URLSearchParams({ phone: waNumber(phone) });
+  if (text) params.set("text", text);
+  return `https://web.whatsapp.com/send?${params.toString()}`;
 }
 
 export function money(value: number | string | null | undefined) {

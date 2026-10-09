@@ -113,12 +113,14 @@ export async function deleteInformationImage(id: string) {
 }
 
 // Work Items
-export async function fetchWorkItems(type: WorkType) {
-  const { data, error } = await supabase
+export async function fetchWorkItems(type: WorkType, workspaceId?: string) {
+  let q = supabase
     .from("work_items")
-    .select("*, designer_leads_view!inner(*), leads(name, phone)")
+    .select("*, designer_leads_view!inner(*), leads!inner(name, phone, workspace_id)")
     .eq("type", type)
     .order("created_at", { ascending: false });
+  if (workspaceId) q = q.eq("leads.workspace_id", workspaceId);
+  const { data, error } = await q;
 
   if (error) throw error;
   return data.map((row: any) => ({
@@ -155,11 +157,13 @@ export async function updateWorkStatus(id: string, status: WorkStatus, fileUrl?:
   return data;
 }
 
-export async function fetchAllCompletedWorkItems() {
-  const { data, error } = await supabase
+export async function fetchAllCompletedWorkItems(workspaceId?: string) {
+  let q = supabase
     .from("work_items")
-    .select("*, designer_leads_view!inner(*)")
+    .select("*, designer_leads_view!inner(*), leads!inner(workspace_id)")
     .eq("status", "completed");
+  if (workspaceId) q = q.eq("leads.workspace_id", workspaceId);
+  const { data, error } = await q;
   if (error) throw error;
   return data.map((row: any) => ({
     ...row,

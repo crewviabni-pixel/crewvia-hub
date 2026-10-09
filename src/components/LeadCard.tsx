@@ -102,7 +102,7 @@ export function LeadCard({
         </a>
         <a
           href={waHref(lead.phone, `Hi${lead.name ? ` ${lead.name.split(" ")[0]}` : ""}, this is Crewvia BNI.`)}
-          target="_blank"
+          target="whatsapp"
           rel="noreferrer"
           onClick={() => whatsapp.mutate()}
           className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900"

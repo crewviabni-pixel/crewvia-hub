@@ -22,6 +22,7 @@ import { AppShell } from "@/components/AppShell";
 import { ChartSkeleton, StatCard, StatCardSkeleton } from "@/components/crm-ui";
 import { LEAD_STATUSES, money, statusMeta } from "@/lib/crm";
 import { fetchActivities, fetchLeads, fetchPayments, fetchReminders } from "@/lib/crm-api";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
   head: () => ({
@@ -56,14 +57,33 @@ const CHART_COLORS = [
 
 function Analytics() {
   const [days, setDays] = useState(30);
+  const { activeWorkspaceId } = useWorkspace();
 
-  const lq = useQuery({ queryKey: ["leads"], queryFn: fetchLeads });
-  const aq = useQuery({ queryKey: ["activities"], queryFn: () => fetchActivities() });
-  const { data: payments = [], isLoading: isPaymentsLoading } = useQuery({
-    queryKey: ["payments"],
-    queryFn: () => fetchPayments(),
+  const lq = useQuery({ 
+    queryKey: ["leads", activeWorkspaceId], 
+    queryFn: () => fetchLeads(activeWorkspaceId || undefined),
+    enabled: !!activeWorkspaceId
   });
-  const rq = useQuery({ queryKey: ["reminders"], queryFn: fetchReminders });
+  const aq = useQuery({ 
+    queryKey: ["activities", activeWorkspaceId], 
+    queryFn: () => fetchActivities(undefined, activeWorkspaceId || undefined),
+    enabled: !!activeWorkspaceId
+  });
+  const { data: payments = [], isLoading: isPaymentsLoading } = useQuery({
+    queryKey: ["payments", activeWorkspaceId],
+    queryFn: async () => {
+      // For payments we can just filter by leads.workspace_id like others, but fetchPayments doesn't take workspaceId yet.
+      // Wait, let's update fetchPayments in crm-api.ts too, or do it here. 
+      // Actually fetchPayments needs an update too. Let's pass it for now.
+      return fetchPayments(undefined, activeWorkspaceId || undefined);
+    },
+    enabled: !!activeWorkspaceId
+  });
+  const rq = useQuery({ 
+    queryKey: ["reminders", activeWorkspaceId], 
+    queryFn: () => fetchReminders(activeWorkspaceId || undefined),
+    enabled: !!activeWorkspaceId
+  });
 
   const isLoading = lq.isLoading || aq.isLoading || isPaymentsLoading || rq.isLoading;
   const leads = lq.data || [];

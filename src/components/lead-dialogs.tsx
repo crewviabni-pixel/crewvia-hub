@@ -895,6 +895,26 @@ export function LeadHistoryDialog({
   );
 }
 
+const copyToClipboardFallback = (text: string) => {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.left = "-999999px";
+  textArea.style.top = "-999999px";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  return new Promise<void>((resolve, reject) => {
+    const success = document.execCommand("copy");
+    textArea.remove();
+    if (success) resolve();
+    else reject(new Error("document.execCommand failed"));
+  });
+};
+
 export function TemplateSuggester({ lead, status, scenario }: { lead: Lead; status: LeadStatus; scenario: CallOutcome }) {
   const { data: template, isLoading } = useQuery({
     queryKey: ['nextTemplate', lead.id, status, scenario],
@@ -915,7 +935,7 @@ export function TemplateSuggester({ lead, status, scenario }: { lead: Lead; stat
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(messageText);
+      await copyToClipboardFallback(messageText);
       await recordTemplateUsage(lead.id, status, scenario, template.followup_order);
       toast.success('Message copied to clipboard!');
       queryClient.invalidateQueries({ queryKey: ['nextTemplate', lead.id, status, scenario] });

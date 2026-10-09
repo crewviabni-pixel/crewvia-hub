@@ -9,6 +9,7 @@ import { LEAD_SOURCES, LEAD_STATUSES, type LeadStatus } from "@/lib/crm";
 import { createLead } from "@/lib/crm-api";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 export const Route = createFileRoute("/_authenticated/add-lead")({
   head: () => ({
     meta: [
@@ -31,6 +32,7 @@ const fieldClass =
 function AddLead() {
   const navigate = useNavigate();
   const refresh = useCrmRefresh();
+  const { activeWorkspaceId } = useWorkspace();
 
 
   const [form, setForm] = useState({
@@ -50,9 +52,11 @@ function AddLead() {
   const isPhoneValid = cleanPhone.length === 10;
   
   const { data: isDuplicate, isFetching: isCheckingPhone } = useQuery({
-    queryKey: ["checkPhone", cleanPhone],
+    queryKey: ["checkPhone", cleanPhone, activeWorkspaceId],
     queryFn: async () => {
-      const { data } = await supabase.from("leads").select("phone");
+      let q = supabase.from("leads").select("phone");
+      if (activeWorkspaceId) q = q.eq("workspace_id", activeWorkspaceId);
+      const { data } = await q;
       if (!data) return false;
       return data.some(d => d.phone && d.phone.replace(/\D/g, "") === cleanPhone);
     },
@@ -93,6 +97,7 @@ function AddLead() {
         notes: form.notes.trim(),
         bni_presentation_date: form.bni_presentation_date || null,
         firstReminderAt: reminderAt ? new Date(reminderAt).toISOString() : null,
+        workspace_id: activeWorkspaceId || null,
       });
     },
     onSuccess: (lead) => {
@@ -135,7 +140,7 @@ function AddLead() {
             </div>
           </div>
           {isPhoneValid && isDuplicate && (
-             <p className="text-xs text-destructive mt-1">This phone number already exists.</p>
+            <p className="text-xs text-destructive mt-1">This phone number already exists.</p>
           )}
         </Labelled>
         <Labelled label="Company">

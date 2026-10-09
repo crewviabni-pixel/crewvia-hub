@@ -1,16 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { format, isToday } from "date-fns";
-import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2, List, Pin, BadgeCheck } from "lucide-react";
+import { format, isToday, differenceInCalendarDays, isPast } from "date-fns";
+import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2, List, Pin, BadgeCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { matchIntelligentSearch } from "@/lib/utils";
 
 import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { EmptyState, StatCard, StatCardSkeleton, StatusPill, BniDateDisplay } from "@/components/crm-ui";
 import { useCrmRefresh, SmartActionDialog, LeadHistoryDialog, toLocalInputValue } from "@/components/lead-dialogs";
+import { AiSummaryDialog } from "@/components/AiSummaryDialog";
 import { QuickMessageMenu } from "@/components/QuickMessageMenu";
-import { ACTIVITY_LABEL, telHref, waHref, ACTION_CONFIG, type Lead, type Reminder, type LeadStatus, type Activity } from "@/lib/crm";
+import { ACTIVITY_LABEL, telHref, waHref, ACTION_CONFIG, type Lead, type Reminder, type LeadStatus, type Activity, LEAD_STATUSES } from "@/lib/crm";
 import {
   cancelReminder,
   completeReminder,
@@ -20,6 +22,7 @@ import {
   fetchReminders,
   snoozeReminder,
 } from "@/lib/crm-api";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/_authenticated/reminders")({
   head: () => ({
@@ -56,11 +59,33 @@ function bucketOf(due: Date): Column {
 }
 
 function RemindersPage() {
+  const [term, setTerm] = useState("");
+  const { activeWorkspaceId } = useWorkspace();
   const refresh = useCrmRefresh();
-  const lq = useQuery({ queryKey: ["leads"], queryFn: fetchLeads });
-  const aq = useQuery({ queryKey: ["activities"], queryFn: () => fetchActivities() });
-  const rq = useQuery({ queryKey: ["reminders"], queryFn: fetchReminders });
-  const wq = useQuery({ queryKey: ["workItemsCompleted"], queryFn: async () => { const { data } = await supabase.from("work_items").select("*").eq("status", "completed"); return data || []; } });
+  const lq = useQuery({ 
+    queryKey: ["leads", activeWorkspaceId], 
+    queryFn: () => fetchLeads(activeWorkspaceId || undefined),
+    enabled: !!activeWorkspaceId
+  });
+  const aq = useQuery({ 
+    queryKey: ["activities", activeWorkspaceId], 
+    queryFn: () => fetchActivities(undefined, activeWorkspaceId || undefined),
+    enabled: !!activeWorkspaceId
+  });
+  const rq = useQuery({ 
+    queryKey: ["reminders", activeWorkspaceId], 
+    queryFn: () => fetchReminders(activeWorkspaceId || undefined),
+    enabled: !!activeWorkspaceId
+  });
+  const wq = useQuery({ 
+    queryKey: ["workItemsCompleted", activeWorkspaceId], 
+    queryFn: async () => { 
+      if (!activeWorkspaceId) return [];
+      const { data } = await supabase.from("work_items").select("*, leads!inner(workspace_id)").eq("status", "completed").eq("leads.workspace_id", activeWorkspaceId); 
+      return data || []; 
+    },
+    enabled: !!activeWorkspaceId
+  });
 
   const isLoading = lq.isLoading || aq.isLoading || rq.isLoading || wq.isLoading;
   const reminders = rq.data || [];
@@ -104,7 +129,17 @@ function RemindersPage() {
 
   const leadMap = useMemo(() => new Map(leads.map((l) => [l.id, l])), [leads]);
 
-  const pending = reminders.filter((r) => r.state === "pending");
+  const pending = reminders.filter((r) => {
+    if (r.state !== "pending") return false;
+    const rLead = leadMap.get(r.lead_id);
+    
+    if (term) {
+      const hay = `${rLead?.name || ""} ${rLead?.phone || ""} ${rLead?.company || ""} ${r.title || ""}`;
+      if (!matchIntelligentSearch(hay, term)) return false;
+    }
+    
+    return true;
+  });
   const buckets = COLUMNS.map((col) => ({
     col,
     items: pending.filter((r) => {
@@ -136,6 +171,7 @@ function RemindersPage() {
   const [activeTab, setActiveTab] = useState<Column>("Today");
   const [completing, setCompleting] = useState<{r: Reminder, lead: Lead | undefined} | null>(null);
   const [historyLead, setHistoryLead] = useState<Lead | null>(null);
+  const [summaryLead, setSummaryLead] = useState<Lead | null>(null);
 
   return (
     <AppShell
@@ -164,7 +200,16 @@ function RemindersPage() {
             <StatCard label="Completed today" value={String(doneToday)} hint={`${leadsToday} new leads`} />
           </div>
 
-          <div className="mb-8">
+                    <div className="mb-5">
+            <input
+              type="text"
+              placeholder="Search reminders..."
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring sm:max-w-xs"
+            />
+          </div>
+<div className="mb-8">
             <div className="mb-6 flex overflow-x-auto rounded-xl bg-secondary/50 p-1">
               {COLUMNS.map((col) => {
                 const count = buckets.find((b) => b.col === col)?.items.length || 0;
@@ -195,6 +240,7 @@ function RemindersPage() {
                 onDelete={(r) => deleteMut.mutate(r)}
                 onEdit={(r, title, dueAt) => editMut.mutate({ r, title, dueAt })}
                 onShowHistory={(lead) => setHistoryLead(lead)}
+                onShowSummary={(lead) => setSummaryLead(lead)}
               />
             </div>
           </div>
@@ -249,6 +295,7 @@ function RemindersPage() {
         open={!!historyLead}
         onOpenChange={(v) => !v && setHistoryLead(null)}
       />
+      <AiSummaryDialog lead={summaryLead} onClose={() => setSummaryLead(null)} />
     </AppShell>
   );
 }
@@ -263,6 +310,7 @@ function TimelineView({
   onDelete,
   onEdit,
   onShowHistory,
+  onShowSummary,
 }: {
   items: Reminder[];
   leadMap: Map<string, Lead>;
@@ -273,6 +321,7 @@ function TimelineView({
   onDelete: (r: Reminder) => void;
   onEdit: (r: Reminder, title: string, dueAt: string) => void;
   onShowHistory: (lead: Lead) => void;
+  onShowSummary: (lead: Lead) => void;
 }) {
   if (items.length === 0) {
     return <EmptyState title="All clear" body="No reminders for this time period." />;
@@ -322,10 +371,13 @@ function TimelineView({
                 ((w.type === 'draft' && lead?.status === 'info_taken') || 
                  (w.type === 'presentation' && lead?.status === 'advance_received'))
               );
-              return (
+              
+                const hasCalls = lead ? activities.some(a => a.lead_id === lead.id && a.kind === "call") : false;
+                return (
                 <ReminderCard
                   reminder={r}
                   lead={lead}
+                  hasCalls={hasCalls}
                   pinnedType={pinnedWork ? pinnedWork.type : null}
               lastActivity={lastActivity ?? null}
               onDone={() => onDone(r, lead)}
@@ -333,6 +385,7 @@ function TimelineView({
               onDelete={() => onDelete(r)}
               onEdit={(title, dueAt) => onEdit(r, title, dueAt)}
               onShowHistory={() => lead && onShowHistory(lead)}
+              onShowSummary={() => lead && onShowSummary(lead)}
                 />
               );
             })()}
@@ -375,7 +428,9 @@ function ReminderCard({
   onDelete,
   onEdit,
   onShowHistory,
+  onShowSummary,
   pinnedType,
+  hasCalls,
 }: {
   reminder: Reminder;
   lead: Lead | undefined;
@@ -385,7 +440,9 @@ function ReminderCard({
   onDelete: () => void;
   onEdit: (title: string, dueAt: string) => void;
   onShowHistory: () => void;
+  onShowSummary: () => void;
   pinnedType?: "draft" | "presentation" | null;
+  hasCalls?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(reminder.title);
@@ -411,17 +468,36 @@ function ReminderCard({
               placeholder="Reminder title"
             />
           ) : (
-            <p className="font-display text-base font-semibold text-foreground">{reminder.title}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-display text-base font-semibold text-foreground">{reminder.title}</p>
+              {(() => {
+                 if (reminder.state === "done") return null;
+                 const daysOverdue = differenceInCalendarDays(new Date(), new Date(reminder.due_at));
+                 if (daysOverdue > 0 && !isToday(new Date(reminder.due_at))) {
+                   return (
+                     <div className="px-1.5 py-0.5 rounded-md bg-destructive/10 text-destructive text-[10px] font-bold uppercase tracking-wide border border-destructive/20">
+                       +{daysOverdue}d Overdue
+                     </div>
+                   );
+                 }
+                 return null;
+              })()}
+            </div>
           )}
           {lead ? (
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               <Link
                 to="/leads/$leadId"
                 params={{ leadId: lead.id }}
-                className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline flex items-center gap-1"
               >
-                {lead.name ? lead.name + " · " : ""}{lead.phone}
+                {lead.name ? lead.name + " · " : ""}<span className="font-bold text-foreground text-[15px]">{lead.phone}</span>
               </Link>
+              {hasCalls === false && (
+                 <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold uppercase tracking-wide">
+                   <Sparkles className="w-3 h-3" /> Fresh
+                 </div>
+              )}
             </div>
           ) : null}
           {pinnedType && (
@@ -440,6 +516,15 @@ function ReminderCard({
               title="History"
             >
               <List className="size-3.5" />
+            </button>
+          )}
+          {!editing && lead && (
+            <button
+              onClick={onShowSummary}
+              className="rounded-md border border-indigo-200 bg-indigo-50 p-1.5 text-indigo-600 hover:bg-indigo-100"
+              title="AI Context Summary"
+            >
+              <Sparkles className="size-3.5" />
             </button>
           )}
           <button
@@ -546,7 +631,7 @@ function ReminderCard({
                 <QuickMessageMenu lead={lead} />
                 <a
                   href={waHref(lead.phone, `Hi${lead.name ? ` ${lead.name.split(" ")[0]}` : ""}, this is Crewvia BNI.`)}
-                  target="_blank"
+                  target="whatsapp"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition-colors hover:bg-emerald-100"
                 >

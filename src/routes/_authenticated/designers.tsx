@@ -92,21 +92,47 @@ function AddDesignerDialog() {
       // Capture current session
       const { data: { session } } = await supabase.auth.getSession();
       
-      const { data, error } = await supabase.auth.signUp({
-        email: `${username.toLowerCase()}@crewviabni.com`,
+      // Sanitize username
+      const safeUsername = username.trim().toLowerCase().replace(/\s+/g, '');
+      const email = `${safeUsername}@crewviabni.com`;
+      
+      let userId = "";
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
         password,
       });
-      if (error) throw error;
-      
-      // Wait a moment for trigger
-      await new Promise(r => setTimeout(r, 1000));
-      
-      // Database trigger automatically inserts into user_roles
-      // based on the signup email. No need to insert manually.
 
-      // 4. Restore Admin Session
+      if (signUpError) {
+        // If user already exists (or error is obscured), try to sign in to get their ID
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInError) {
+          throw new Error(signUpError.message || "Failed to create designer");
+        }
+        userId = signInData.user.id;
+      } else {
+        userId = signUpData.user!.id;
+      }
+
+      // 3. Restore Admin Session FIRST so we have admin rights to insert the role
       if (session) {
         await supabase.auth.setSession(session);
+      }
+
+      // 4. Explicitly insert/upsert into user_roles
+      if (userId) {
+        const { error: insertError } = await supabase.from("user_roles").upsert({
+          user_id: userId,
+          role: "designer",
+          username: safeUsername,
+        });
+        if (insertError) {
+          throw new Error("Failed to assign designer role: " + insertError.message);
+        }
       }
     },
     onSuccess: () => {

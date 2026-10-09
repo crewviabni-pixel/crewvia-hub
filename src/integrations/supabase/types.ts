@@ -222,6 +222,7 @@ export type Database = {
           source: string
           status: Database["public"]["Enums"]["lead_status"]
           updated_at: string
+          workspace_id: string | null
         }
         Insert: {
           amount_paid?: number
@@ -248,6 +249,7 @@ export type Database = {
           source?: string
           status?: Database["public"]["Enums"]["lead_status"]
           updated_at?: string
+          workspace_id?: string | null
         }
         Update: {
           amount_paid?: number
@@ -274,6 +276,7 @@ export type Database = {
           source?: string
           status?: Database["public"]["Enums"]["lead_status"]
           updated_at?: string
+          workspace_id?: string | null
         }
         Relationships: []
       }
@@ -288,6 +291,7 @@ export type Database = {
           scenario: Database["public"]["Enums"]["call_outcome"]
           status: Database["public"]["Enums"]["lead_status"]
           updated_at: string
+          workspace_id: string | null
         }
         Insert: {
           created_at?: string
@@ -299,6 +303,7 @@ export type Database = {
           scenario: Database["public"]["Enums"]["call_outcome"]
           status: Database["public"]["Enums"]["lead_status"]
           updated_at?: string
+          workspace_id?: string | null
         }
         Update: {
           created_at?: string
@@ -310,6 +315,7 @@ export type Database = {
           scenario?: Database["public"]["Enums"]["call_outcome"]
           status?: Database["public"]["Enums"]["lead_status"]
           updated_at?: string
+          workspace_id?: string | null
         }
         Relationships: []
       }
@@ -436,6 +442,27 @@ export type Database = {
         }
         Relationships: []
       }
+      workspaces: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string | null
+        }
+        Relationships: []
+      }
       work_items: {
         Row: {
           created_at: string
@@ -505,6 +532,7 @@ export type Database = {
           source: string | null
           status: Database["public"]["Enums"]["lead_status"] | null
           updated_at: string | null
+          workspace_id: string | null
         }
         Insert: {
           bni_presentation_date?: string | null

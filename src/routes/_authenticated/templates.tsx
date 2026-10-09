@@ -6,6 +6,7 @@ import { LEAD_STATUSES, CALL_OUTCOMES, renderTemplate, type MessageTemplate, typ
 import { useState } from "react";
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus, ArrowRight } from "lucide-react";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/_authenticated/templates")({
   head: () => ({
@@ -16,9 +17,11 @@ export const Route = createFileRoute("/_authenticated/templates")({
 
 function TemplatesPage() {
   const queryClient = useQueryClient();
+  const { activeWorkspaceId } = useWorkspace();
   const { data: templates = [], isLoading } = useQuery({
-    queryKey: ["templates"],
-    queryFn: fetchMessageTemplates,
+    queryKey: ["templates", activeWorkspaceId],
+    queryFn: () => fetchMessageTemplates(activeWorkspaceId || undefined),
+    enabled: !!activeWorkspaceId
   });
 
   const deleteMut = useMutation({
@@ -57,7 +60,8 @@ function TemplatesPage() {
             status: "take_info",
             scenario: "no_answer",
             followup_order: 0,
-            is_active: true
+            is_active: true,
+            workspace_id: activeWorkspaceId || null
           })}
           className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
         >

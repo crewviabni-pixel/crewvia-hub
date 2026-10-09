@@ -13,6 +13,7 @@ import {
   PhoneCall,
   Trash2,
   Send,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,6 +27,7 @@ import {
   useCrmRefresh,
   SmartActionDialog,
 } from "@/components/lead-dialogs";
+import { fetchLeadInformation, fetchAllWorkItemsForLead } from "@/lib/work-api";
 import {
   ACTIVITY_LABEL,
   LEAD_SOURCES,
@@ -100,7 +102,7 @@ function LeadDetail() {
   });
   const { data: allReminders = [] } = useQuery({
     queryKey: ["reminders"],
-    queryFn: fetchReminders,
+    queryFn: () => fetchReminders(),
   });
 
   const [callOpen, setCallOpen] = useState(false);
@@ -132,7 +134,7 @@ function LeadDetail() {
   const whatsapp = useMutation({ mutationFn: () => logWhatsapp(lead!), onSuccess: refresh });
 
   const dropReminder = useMutation({
-    mutationFn: (id: string) => cancelReminder(allReminders.find((r) => r.id === id)!),
+    mutationFn: (id: string) => cancelReminder(allReminders.find((r: Reminder) => r.id === id)!),
     onSuccess: refresh,
   });
   const removePayment = useMutation({
@@ -231,7 +233,7 @@ function LeadDetail() {
               </a>
               <a
                 href={waHref(lead.phone, `Hi${lead.name ? ` ${lead.name.split(" ")[0]}` : ""}, this is Crewvia BNI.`)}
-                target="_blank"
+                target="whatsapp"
                 rel="noreferrer"
                 onClick={() => whatsapp.mutate()}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900"

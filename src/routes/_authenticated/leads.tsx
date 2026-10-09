@@ -9,6 +9,8 @@ import { LeadCard } from "@/components/LeadCard";
 import { CallOutcomeDialog, PaymentDialog, ReminderDialog } from "@/components/lead-dialogs";
 import { LEAD_SOURCES, LEAD_STATUSES, PAYMENT_STATUSES, money, type Lead } from "@/lib/crm";
 import { fetchLeads } from "@/lib/crm-api";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { matchIntelligentSearch } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/leads")({
   head: () => ({
@@ -33,7 +35,12 @@ function LeadsLayout() {
 type SortKey = "recent" | "created" | "value" | "reminder";
 
 function LeadsList() {
-  const { data: leads = [], isLoading } = useQuery({ queryKey: ["leads"], queryFn: fetchLeads });
+  const { activeWorkspaceId } = useWorkspace();
+  const { data: leads = [], isLoading } = useQuery({ 
+    queryKey: ["leads", activeWorkspaceId], 
+    queryFn: () => fetchLeads(activeWorkspaceId || undefined),
+    enabled: !!activeWorkspaceId
+  });
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -53,10 +60,8 @@ function LeadsList() {
 
     const rows = leads.filter((lead) => {
       if (term) {
-        const hay = `${lead.name || ""} ${lead.phone || ""} ${lead.company || ""} ${lead.city || ""} ${lead.service || ""}`.toLowerCase();
-        const strippedTerm = term.replace(/\s+/g, "");
-        const strippedHay = hay.replace(/\s+/g, "");
-        if (!hay.includes(term) && !strippedHay.includes(strippedTerm)) return false;
+        const hay = `${lead.name || ""} ${lead.phone || ""} ${lead.company || ""} ${lead.city || ""} ${lead.service || ""}`;
+        if (!matchIntelligentSearch(hay, term)) return false;
       }
       if (status !== "all" && lead.status !== status) return false;
       if (payment !== "all" && lead.payment_status !== payment) return false;

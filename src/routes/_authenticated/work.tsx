@@ -1,16 +1,17 @@
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Loader2, Upload, ExternalLink, ImageIcon, Download, History } from "lucide-react";
+import { Loader2, Upload, ExternalLink, ImageIcon, Download, History, Edit2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchWorkItems, updateWorkStatus, fetchLeadInformation } from "@/lib/work-api";
-import { WorkStatus, WorkType } from "@/lib/crm";
+import { WorkStatus, WorkType, LEAD_STATUSES, LeadStatus } from "@/lib/crm";
+import { matchIntelligentSearch } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { InformationModal } from "./outbox";
-import { Edit2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/_authenticated/work")({
   component: WorkPage,
@@ -19,6 +20,8 @@ export const Route = createFileRoute("/_authenticated/work")({
 function WorkPage() {
   const [activeTab, setActiveTab] = useState<WorkType>("draft");
   const [showHistory, setShowHistory] = useState(false);
+  const [term, setTerm] = useState("");
+  
 
   return (
     <AppShell 
@@ -34,6 +37,15 @@ function WorkPage() {
         </button>
       }
     >
+            <div className="mb-5">
+        <input
+          type="text"
+          placeholder="Search leads..."
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring sm:max-w-xs"
+        />
+      </div>
       <div className="mb-6 flex rounded-lg bg-secondary p-1">
         <button
           onClick={() => setActiveTab("draft")}
@@ -53,35 +65,45 @@ function WorkPage() {
         </button>
       </div>
 
-      <WorkBoard type={activeTab} showHistory={showHistory} />
+      <WorkBoard type={activeTab} showHistory={showHistory} term={term} />
     </AppShell>
   );
 }
 
-function WorkBoard({ type, showHistory }: { type: WorkType, showHistory: boolean }) {
+function WorkBoard({ type, showHistory, term }: { type: WorkType, showHistory: boolean, term: string }) {
   const context = useRouteContext({ strict: false }) as any;
   const appRole = context?.appRole || 'designer';
+  const { activeWorkspaceId } = useWorkspace();
 
   const { data: items, isLoading } = useQuery({
-    queryKey: ["workItems", type, appRole],
-    queryFn: () => fetchWorkItems(type),
+    queryKey: ["workItems", type, appRole, activeWorkspaceId],
+    queryFn: () => fetchWorkItems(type, activeWorkspaceId || undefined),
+    enabled: !!activeWorkspaceId
   });
 
   if (isLoading) {
     return <div className="py-10 text-center text-muted-foreground"><Loader2 className="mx-auto size-6 animate-spin" /></div>;
   }
 
-  const pending = items?.filter(i => i.status === "pending") || [];
-  const inProgress = items?.filter(i => i.status === "in_progress") || [];
+  const filteredItems = items?.filter(i => {
+    if (term) {
+      const hay = `${i.lead.name || ""} ${i.lead.phone || ""} ${i.lead.company || ""}`;
+      if (!matchIntelligentSearch(hay, term)) return false;
+    }
+    return true;
+  }) || [];
+
+  const pending = filteredItems.filter(i => i.status === "pending");
+  const inProgress = filteredItems.filter(i => i.status === "in_progress") || [];
   
-  const completed = items?.filter(i => {
+  const completed = filteredItems.filter(i => {
     if (i.status !== "completed") return false;
     if (type === "draft") return i.lead.status !== "draft_sent" && i.lead.status !== "approved" && i.lead.status !== "advance_received" && i.lead.status !== "presentation_sent" && i.lead.status !== "fully_paid" && i.lead.status !== "lost";
     if (type === "presentation") return i.lead.status !== "presentation_sent" && i.lead.status !== "fully_paid" && i.lead.status !== "lost";
     return true;
   }) || [];
 
-  const history = items?.filter(i => {
+  const history = filteredItems.filter(i => {
     if (i.status !== "completed") return false;
     if (type === "draft") return ["draft_sent", "approved", "advance_received", "presentation_sent", "fully_paid", "lost"].includes(i.lead.status);
     if (type === "presentation") return ["presentation_sent", "fully_paid", "lost"].includes(i.lead.status);

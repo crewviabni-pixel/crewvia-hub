@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { requestNotificationPermission } from "@/lib/firebase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export function AppShell({
   title,
@@ -26,12 +28,18 @@ export function AppShell({
   const context = useRouteContext({ strict: false }) as any;
   const appRole = context?.appRole || 'designer';
 
-    const { data: inboxCount = 0 } = useQuery({
-    queryKey: ["inboxCount"],
+  const { workspaces, activeWorkspaceId, setActiveWorkspaceId, refreshWorkspaces } = useWorkspace();
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [newWorkspaceName, setNewWorkspaceName] = useState("");
+
+  const { data: inboxCount = 0 } = useQuery({
+    queryKey: ["inboxCount", activeWorkspaceId],
     queryFn: async () => {
+      if (!activeWorkspaceId) return 0;
       const { data } = await supabase
         .from("leads")
         .select(`*, work_items(*)`)
+        .eq("workspace_id", activeWorkspaceId)
         .in("status", ["info_taken", "advance_received"]);
       
       if (!data) return 0;
@@ -42,9 +50,28 @@ export function AppShell({
         return !hasWork;
       }).length;
     },
-    enabled: appRole === 'admin',
+    enabled: appRole === 'admin' && !!activeWorkspaceId,
     refetchInterval: 30000
   });
+
+  const handleWorkspaceChange = (val: string) => {
+    if (val === "new") {
+      setIsCreatingWorkspace(true);
+    } else {
+      setActiveWorkspaceId(val);
+    }
+  };
+
+  const handleCreateWorkspace = async () => {
+    if (!newWorkspaceName.trim()) return;
+    const { data } = await supabase.from("workspaces").insert({ name: newWorkspaceName.trim() }).select().single();
+    if (data) {
+      await refreshWorkspaces();
+      setActiveWorkspaceId(data.id);
+      setIsCreatingWorkspace(false);
+      setNewWorkspaceName("");
+    }
+  };
 
   let navItems = [];
   if (appRole === 'admin') {
@@ -74,12 +101,29 @@ export function AppShell({
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <Link to={(appRole === 'admin' ? "/leads" : "/work") as any} className="flex items-center gap-2">
-            <div className="grid size-8 place-items-center">
-              <img src="/logo.png" alt="Crewvia Logo" className="size-full object-contain" />
+          <div className="flex items-center gap-2">
+            <Link to={(appRole === 'admin' ? "/leads" : "/work") as any} className="flex items-center">
+              <div className="grid size-8 place-items-center">
+                <img src="/logo.png" alt="Crewvia Logo" className="size-full object-contain" />
+              </div>
+            </Link>
+            
+            <div className="hidden sm:block w-48">
+              <Select value={activeWorkspaceId || ""} onValueChange={handleWorkspaceChange}>
+                <SelectTrigger className="h-8 bg-transparent border-0 font-display font-semibold text-sm shadow-none focus:ring-0">
+                  <SelectValue placeholder="Select Workspace" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workspaces.map(ws => (
+                    <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                  ))}
+                  <SelectItem value="new" className="text-primary font-medium border-t mt-1 pt-1 rounded-none">
+                    + Create Campaign
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <span className="hidden font-display text-sm font-semibold sm:block">Crewvia BNI</span>
-          </Link>
+          </div>
 
           <nav className="ml-4 hidden items-center gap-1 md:flex">
             {navItems.map((item) => (
@@ -136,6 +180,32 @@ export function AppShell({
           </Link>
         ))}
       </nav>
+      <Dialog open={isCreatingWorkspace} onOpenChange={setIsCreatingWorkspace}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-display">Create Campaign/Workspace</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Campaign Name</label>
+              <input
+                type="text"
+                value={newWorkspaceName}
+                onChange={(e) => setNewWorkspaceName(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="e.g. Pastel Arabia"
+              />
+            </div>
+            <button
+              onClick={handleCreateWorkspace}
+              disabled={!newWorkspaceName.trim()}
+              className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              Create Workspace
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
