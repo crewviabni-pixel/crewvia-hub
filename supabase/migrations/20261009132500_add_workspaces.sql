@@ -44,8 +44,11 @@ BEGIN
   UPDATE public.message_templates SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
 END $$;
 
--- Update the view to include workspace_id
-CREATE OR REPLACE VIEW public.designer_leads_view AS
+-- Drop the view first to avoid column mismatch errors when adding workspace_id
+DROP VIEW IF EXISTS public.designer_leads_view;
+
+-- Create the updated view
+CREATE VIEW public.designer_leads_view AS
 SELECT
   id,
   workspace_id,
