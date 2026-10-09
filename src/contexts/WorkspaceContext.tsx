@@ -22,14 +22,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase.from("workspaces").select("*").order("created_at");
     if (data) {
       setWorkspaces(data);
-      if (data.length > 0) {
-        const savedId = localStorage.getItem("crewvia_active_workspace");
-        if (savedId && data.some((w) => w.id === savedId)) {
-          setActiveWorkspaceIdState(savedId);
-        } else {
-          setActiveWorkspaceIdState(data[0].id);
-          localStorage.setItem("crewvia_active_workspace", data[0].id);
-        }
+        if (data.length > 0 && data[0]) {
+          const firstId = data[0].id;
+          const savedId = localStorage.getItem("crewvia_active_workspace");
+          if (savedId && data.some((w) => w.id === savedId)) {
+            setActiveWorkspaceIdState(savedId);
+          } else {
+            setActiveWorkspaceIdState(firstId);
+            localStorage.setItem("crewvia_active_workspace", firstId);
+          }
       } else {
         setActiveWorkspaceIdState(null);
       }
