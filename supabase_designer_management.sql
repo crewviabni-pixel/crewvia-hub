@@ -1,15 +1,11 @@
 -- ==============================================================================
 -- CREWVIA BNI CRM: PRODUCTION DESIGNER USER PROVISIONING & MANAGEMENT RPC
 -- ==============================================================================
--- This script allows admins to create, reset passwords, and manage unlimited 
--- designers directly inside the CRM UI without opening the Supabase Dashboard.
--- Run this in your Supabase SQL Editor once.
+-- Run this in your Supabase SQL Editor once to enable unlimited 1-click designer creation.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- ------------------------------------------------------------------------------
 -- 1. admin_create_designer
--- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.admin_create_designer(
   p_username TEXT,
   p_password TEXT,
@@ -132,7 +128,8 @@ BEGIN
     now(),
     now(),
     now()
-  );
+  )
+  ON CONFLICT DO NOTHING;
 
   -- Insert into public.user_roles
   INSERT INTO public.user_roles (
@@ -159,9 +156,7 @@ BEGIN
 END;
 $$;
 
--- ------------------------------------------------------------------------------
 -- 2. admin_reset_designer_password
--- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.admin_reset_designer_password(
   p_user_id UUID,
   p_new_password TEXT
@@ -201,9 +196,7 @@ BEGIN
 END;
 $$;
 
--- ------------------------------------------------------------------------------
 -- 3. admin_delete_designer
--- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.admin_delete_designer(
   p_user_id UUID
 )
@@ -242,7 +235,9 @@ BEGIN
 END;
 $$;
 
--- Grant execution to authenticated users (internal checks enforce admin only)
 GRANT EXECUTE ON FUNCTION public.admin_create_designer(TEXT, TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_reset_designer_password(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_delete_designer(UUID) TO authenticated;
+
+-- Force PostgREST schema cache reload immediately
+NOTIFY pgrst, 'reload schema';

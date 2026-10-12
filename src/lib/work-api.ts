@@ -42,6 +42,15 @@ export async function createDesigner(username: string, password: string, name?: 
   });
 
   if (error) {
+    if (
+      error.code === "PGRST202" ||
+      error.message?.includes("schema cache") ||
+      error.message?.includes("admin_create_designer")
+    ) {
+      const customErr = new Error("SQL_SETUP_REQUIRED");
+      (customErr as any).code = "SQL_SETUP_REQUIRED";
+      throw customErr;
+    }
     throw new Error(error.message || "Failed to create designer");
   }
 

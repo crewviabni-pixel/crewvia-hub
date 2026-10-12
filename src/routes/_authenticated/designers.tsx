@@ -20,7 +20,9 @@ import {
   AlertTriangle, 
   Users,
   ExternalLink,
-  Loader2
+  Loader2,
+  Database,
+  Terminal
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -32,6 +34,252 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 export const Route = createFileRoute("/_authenticated/designers")({
   component: DesignersScreen,
 });
+
+const SUPABASE_PROJECT_SQL_URL = "https://supabase.com/dashboard/project/mawmjqeyjzktxbtsswgw/sql/new";
+
+const SQL_MIGRATION_TEXT = `-- ==============================================================================
+-- CREWVIA BNI CRM: PRODUCTION DESIGNER USER PROVISIONING & MANAGEMENT RPC
+-- ==============================================================================
+-- Run this in your Supabase SQL Editor once to enable unlimited 1-click designer creation.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- 1. admin_create_designer
+CREATE OR REPLACE FUNCTION public.admin_create_designer(
+  p_username TEXT,
+  p_password TEXT,
+  p_name TEXT DEFAULT ''
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  v_caller_id UUID;
+  v_new_user_id UUID;
+  v_email TEXT;
+  v_clean_username TEXT;
+  v_clean_name TEXT;
+  v_hashed_pw TEXT;
+BEGIN
+  v_caller_id := auth.uid();
+
+  -- Verify that the caller is an active admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.user_roles 
+    WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: Only administrators can create designers.';
+  END IF;
+
+  -- Clean & validate username
+  v_clean_username := lower(trim(regexp_replace(p_username, '\\s+', '', 'g')));
+  IF length(v_clean_username) < 3 THEN
+    RAISE EXCEPTION 'Username must be at least 3 characters long.';
+  END IF;
+
+  IF length(p_password) < 6 THEN
+    RAISE EXCEPTION 'Password must be at least 6 characters long.';
+  END IF;
+
+  v_clean_name := trim(coalesce(p_name, ''));
+  IF v_clean_name = '' THEN
+    v_clean_name := initcap(v_clean_username);
+  END IF;
+
+  -- Check if username already exists in user_roles
+  IF EXISTS (
+    SELECT 1 FROM public.user_roles 
+    WHERE lower(username) = v_clean_username
+  ) THEN
+    RAISE EXCEPTION 'Username "%" is already taken. Please choose another username.', v_clean_username;
+  END IF;
+
+  v_email := v_clean_username || '@crewviabni.com';
+
+  -- Check if email already exists in auth.users
+  IF EXISTS (
+    SELECT 1 FROM auth.users 
+    WHERE lower(email) = lower(v_email)
+  ) THEN
+    RAISE EXCEPTION 'A user with email "%" already exists in authentication.', v_email;
+  END IF;
+
+  v_new_user_id := gen_random_uuid();
+  v_hashed_pw := crypt(p_password, gen_salt('bf'));
+
+  -- Insert directly into auth.users with pre-confirmed email (zero email verification needed)
+  INSERT INTO auth.users (
+    instance_id,
+    id,
+    aud,
+    role,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    recovery_sent_at,
+    last_sign_in_at,
+    raw_app_meta_data,
+    raw_user_meta_data,
+    created_at,
+    updated_at,
+    confirmation_token,
+    email_change,
+    email_change_token_new,
+    recovery_token
+  ) VALUES (
+    '00000000-0000-0000-0000-000000000000',
+    v_new_user_id,
+    'authenticated',
+    'authenticated',
+    v_email,
+    v_hashed_pw,
+    now(),
+    now(),
+    now(),
+    jsonb_build_object('provider', 'email', 'providers', array['email']),
+    jsonb_build_object('username', v_clean_username, 'name', v_clean_name),
+    now(),
+    now(),
+    '',
+    '',
+    '',
+    ''
+  );
+
+  -- Insert identity into auth.identities for standard email+password sign in
+  INSERT INTO auth.identities (
+    id,
+    user_id,
+    identity_data,
+    provider,
+    provider_id,
+    last_sign_in_at,
+    created_at,
+    updated_at
+  ) VALUES (
+    v_new_user_id,
+    v_new_user_id,
+    jsonb_build_object('sub', v_new_user_id::text, 'email', v_email),
+    'email',
+    v_email,
+    now(),
+    now(),
+    now()
+  )
+  ON CONFLICT DO NOTHING;
+
+  -- Insert into public.user_roles
+  INSERT INTO public.user_roles (
+    user_id,
+    role,
+    username,
+    is_suspended,
+    created_at
+  ) VALUES (
+    v_new_user_id,
+    'designer',
+    v_clean_username,
+    false,
+    now()
+  );
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'user_id', v_new_user_id,
+    'username', v_clean_username,
+    'name', v_clean_name,
+    'email', v_email
+  );
+END;
+$$;
+
+-- 2. admin_reset_designer_password
+CREATE OR REPLACE FUNCTION public.admin_reset_designer_password(
+  p_user_id UUID,
+  p_new_password TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  v_caller_id UUID;
+  v_hashed_pw TEXT;
+BEGIN
+  v_caller_id := auth.uid();
+
+  -- Verify that caller is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.user_roles 
+    WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: Only administrators can reset designer passwords.';
+  END IF;
+
+  IF length(p_new_password) < 6 THEN
+    RAISE EXCEPTION 'New password must be at least 6 characters long.';
+  END IF;
+
+  v_hashed_pw := crypt(p_new_password, gen_salt('bf'));
+
+  -- Update encrypted password in auth.users
+  UPDATE auth.users
+  SET encrypted_password = v_hashed_pw,
+      updated_at = now()
+  WHERE id = p_user_id;
+
+  RETURN jsonb_build_object('success', true, 'user_id', p_user_id);
+END;
+$$;
+
+-- 3. admin_delete_designer
+CREATE OR REPLACE FUNCTION public.admin_delete_designer(
+  p_user_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  v_caller_id UUID;
+BEGIN
+  v_caller_id := auth.uid();
+
+  -- Verify caller is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.user_roles 
+    WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: Only administrators can delete designers.';
+  END IF;
+
+  -- Ensure we don't accidentally delete an admin
+  IF EXISTS (
+    SELECT 1 FROM public.user_roles 
+    WHERE user_id = p_user_id AND role = 'admin'
+  ) THEN
+    RAISE EXCEPTION 'Cannot delete an administrator account.';
+  END IF;
+
+  -- Delete from auth.users (this cascades or we also delete from user_roles)
+  DELETE FROM auth.identities WHERE user_id = p_user_id;
+  DELETE FROM public.user_roles WHERE user_id = p_user_id;
+  DELETE FROM auth.users WHERE id = p_user_id;
+
+  RETURN jsonb_build_object('success', true, 'user_id', p_user_id);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_create_designer(TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_reset_designer_password(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_delete_designer(UUID) TO authenticated;
+
+-- Force PostgREST schema cache reload immediately
+NOTIFY pgrst, 'reload schema';`;
 
 function generateRandomPassword(length = 10) {
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%";
@@ -46,6 +294,7 @@ function DesignersScreen() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [sqlSetupModalOpen, setSqlSetupModalOpen] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<{
     username: string;
     name: string;
@@ -120,7 +369,7 @@ function DesignersScreen() {
         </div>
       </div>
 
-      {/* Search and Add Button */}
+      {/* Search, SQL Setup Button and Add Button */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -133,14 +382,26 @@ function DesignersScreen() {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={() => setAddModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-all shadow-sm shrink-0"
-        >
-          <Plus className="size-4" />
-          Add Designer
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSqlSetupModalOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-secondary/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors shrink-0"
+            title="View database setup SQL"
+          >
+            <Database className="size-3.5 text-accent" />
+            <span>Database SQL Setup</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAddModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-all shadow-sm shrink-0"
+          >
+            <Plus className="size-4" />
+            Add Designer
+          </button>
+        </div>
       </div>
 
       {/* Designers Table */}
@@ -283,11 +544,24 @@ function DesignersScreen() {
       <AddDesignerDialog 
         open={addModalOpen} 
         onOpenChange={setAddModalOpen} 
+        onSqlSetupRequired={() => setSqlSetupModalOpen(true)}
         onSuccess={(creds) => {
           setAddModalOpen(false);
           setCreatedCredentials(creds);
         }}
       />
+
+      {/* Database SQL Setup Modal */}
+      {sqlSetupModalOpen && (
+        <SqlSetupDialog
+          open={sqlSetupModalOpen}
+          onClose={() => setSqlSetupModalOpen(false)}
+          onRetry={() => {
+            setSqlSetupModalOpen(false);
+            setAddModalOpen(true);
+          }}
+        />
+      )}
 
       {/* Created Credentials Modal */}
       {createdCredentials && (
@@ -322,10 +596,12 @@ function DesignersScreen() {
 function AddDesignerDialog({
   open,
   onOpenChange,
+  onSqlSetupRequired,
   onSuccess,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSqlSetupRequired: () => void;
   onSuccess: (creds: { username: string; name: string; password: string }) => void;
 }) {
   const queryClient = useQueryClient();
@@ -356,7 +632,12 @@ function AddDesignerDialog({
       setPassword("");
     },
     onError: (err: any) => {
-      toast.error(err.message || "Failed to create designer");
+      if (err.message === "SQL_SETUP_REQUIRED" || err.code === "SQL_SETUP_REQUIRED") {
+        onOpenChange(false);
+        onSqlSetupRequired();
+      } else {
+        toast.error(err.message || "Failed to create designer");
+      }
     },
   });
 
@@ -468,6 +749,121 @@ function AddDesignerDialog({
             </button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ------------------------------------------------------------------------------
+// Database SQL Setup Modal (Guides user to paste script in Supabase once)
+// ------------------------------------------------------------------------------
+function SqlSetupDialog({
+  open,
+  onClose,
+  onRetry,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onRetry: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SQL_MIGRATION_TEXT);
+    setCopied(true);
+    toast.success("SQL setup script copied to clipboard!");
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-xl max-h-[92vh] overflow-y-auto bg-card border-border">
+        <DialogHeader>
+          <div className="size-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-2">
+            <Database className="size-6" />
+          </div>
+          <DialogTitle className="text-base font-bold text-foreground">
+            1-Minute Setup: Activate Database Function
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+            The stored procedure <span className="font-mono text-accent font-semibold">admin_create_designer</span> must be run once in your Supabase SQL Editor so you can create unlimited designers from the CRM without ever touching the Supabase dashboard again.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Steps */}
+          <div className="grid gap-2 text-xs">
+            <div className="flex items-start gap-2.5 rounded-lg border border-border bg-secondary/30 p-2.5">
+              <span className="size-5 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">1</span>
+              <div>
+                <p className="font-semibold text-foreground">Copy the SQL Script</p>
+                <p className="text-muted-foreground text-[11px] mt-0.5">Click the "Copy SQL Script" button below to copy the complete procedure.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 rounded-lg border border-border bg-secondary/30 p-2.5">
+              <span className="size-5 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">2</span>
+              <div>
+                <p className="font-semibold text-foreground">Paste & Click "Run" in Supabase</p>
+                <p className="text-muted-foreground text-[11px] mt-0.5">Open your Supabase SQL Editor, paste the script, and press "Run" (takes 2 seconds).</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 rounded-lg border border-border bg-secondary/30 p-2.5">
+              <span className="size-5 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">3</span>
+              <div>
+                <p className="font-semibold text-foreground">All Set!</p>
+                <p className="text-muted-foreground text-[11px] mt-0.5">Come back here and create as many designers as you want with 1 click.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={handleCopySql}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-accent text-accent-foreground px-4 py-2.5 text-xs font-semibold hover:bg-accent/90 transition-all shadow-sm"
+            >
+              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              <span>{copied ? "SQL Copied!" : "Copy SQL Script"}</span>
+            </button>
+
+            <a
+              href={SUPABASE_PROJECT_SQL_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary/80 text-foreground px-4 py-2.5 text-xs font-semibold hover:bg-secondary transition-colors"
+            >
+              <ExternalLink className="size-4 text-accent" />
+              <span>Open Supabase SQL Editor</span>
+            </a>
+          </div>
+
+          {/* Code Preview */}
+          <div className="rounded-lg border border-border bg-neutral-950 p-3 text-[11px] font-mono text-neutral-300 max-h-40 overflow-y-auto space-y-1">
+            <p className="text-neutral-500">// Script Preview (supabase_designer_management.sql)</p>
+            <pre className="text-neutral-300 whitespace-pre-wrap">{SQL_MIGRATION_TEXT.slice(0, 480)}...</pre>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary transition-colors"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-xs font-semibold transition-colors shadow-sm"
+          >
+            <CheckCircle className="size-3.5" />
+            <span>I've Run the SQL — Try Again</span>
+          </button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
