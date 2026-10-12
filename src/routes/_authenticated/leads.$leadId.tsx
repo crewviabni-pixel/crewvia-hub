@@ -1,6 +1,6 @@
 import { Zap } from "lucide-react";
 import { createFileRoute, Link, useParams, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import {
@@ -20,6 +20,10 @@ import {
   Loader2,
   Eye,
   Share2,
+  Ban,
+  RefreshCw,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,7 +40,7 @@ import {
 } from "@/components/lead-dialogs";
 import { DocumentPreviewModal } from "@/components/DocumentPreviewModal";
 import { createPreviewShareUrl } from "@/lib/preview-utils";
-import { fetchLeadInformation, fetchAllWorkItemsForLead } from "@/lib/work-api";
+import { fetchLeadInformation, fetchAllWorkItemsForLead, expireWorkPreview, regenerateWorkPreview } from "@/lib/work-api";
 import {
   ACTIVITY_LABEL,
   LEAD_SOURCES,
@@ -87,6 +91,8 @@ const fieldClass =
 function LeadDetail() {
   const { leadId } = useParams({ from: "/_authenticated/leads/$leadId" });
   const refresh = useCrmRefresh();
+  const queryClient = useQueryClient();
+  const [processingItemId, setProcessingItemId] = useState<string | null>(null);
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ["leads", leadId],
@@ -528,52 +534,132 @@ function LeadDetail() {
                     <p className="text-sm text-muted-foreground">No work files have been requested yet.</p>
                   ) : (
                     <div className="space-y-2.5">
-                      {workItems.map((item: any) => (
-                        <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border p-3.5 bg-card/60">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-semibold capitalize">{item.type}</p>
-                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${item.status === 'completed' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20'}`}>
-                                {item.status.replace("_", " ")}
-                              </span>
+                      {workItems.map((item: any) => {
+                        const isExpired = item.preview_enabled === false;
+                        const isCompleted = item.status === "completed" && item.file_url;
+
+                        return (
+                          <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border p-3.5 bg-card/60">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-semibold capitalize">{item.type}</p>
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${item.status === 'completed' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20'}`}>
+                                  {item.status.replace("_", " ")}
+                                </span>
+                                {isCompleted && (
+                                  isExpired ? (
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 inline-flex items-center gap-1">
+                                      <Ban className="size-2.5" /> Link Expired
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 inline-flex items-center gap-1">
+                                      <ShieldCheck className="size-2.5" /> Link Active
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                              <p className="text-[11px] text-muted-foreground mt-1">{format(new Date(item.created_at), "d MMM yyyy, h:mm a")}</p>
                             </div>
-                            <p className="text-[11px] text-muted-foreground mt-1">{format(new Date(item.created_at), "d MMM yyyy, h:mm a")}</p>
+
+                            {isCompleted ? (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {/* Preview in software */}
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewWorkItem({ ...item, lead })}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground hover:bg-accent/90 transition-all shadow-sm"
+                                >
+                                  <Eye className="size-3.5" /> Preview
+                                </button>
+
+                                {/* Expire / Revoke Button (shown when active) */}
+                                {!isExpired ? (
+                                  <button
+                                    type="button"
+                                    disabled={processingItemId === item.id}
+                                    onClick={async () => {
+                                      try {
+                                        setProcessingItemId(item.id);
+                                        await expireWorkPreview(item.id);
+                                        await queryClient.invalidateQueries({ queryKey: ["all-work-items", leadId] });
+                                        toast.warning(`Preview link for ${item.type} expired! Client can no longer view this presentation.`);
+                                      } catch (err: any) {
+                                        toast.error(err.message || "Failed to expire preview link");
+                                      } finally {
+                                        setProcessingItemId(null);
+                                      }
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                                    title="Immediately expire this preview link so the client cannot view it"
+                                  >
+                                    {processingItemId === item.id ? <Loader2 className="size-3 animate-spin" /> : <Ban className="size-3" />}
+                                    <span>Expire</span>
+                                  </button>
+                                ) : null}
+
+                                {/* Regenerate Button */}
+                                <button
+                                  type="button"
+                                  disabled={processingItemId === item.id}
+                                  onClick={async () => {
+                                    try {
+                                      setProcessingItemId(item.id);
+                                      const res = await regenerateWorkPreview(item.id);
+                                      await queryClient.invalidateQueries({ queryKey: ["all-work-items", leadId] });
+                                      const newUrl = createPreviewShareUrl({ ...item, preview_token: res.preview_token, preview_enabled: true, lead }, { preferLiveDomain: true });
+                                      navigator.clipboard.writeText(newUrl);
+                                      toast.success(`New ${item.type} preview link generated & copied to clipboard! Previous link invalidated.`);
+                                    } catch (err: any) {
+                                      toast.error(err.message || "Failed to regenerate preview link");
+                                    } finally {
+                                      setProcessingItemId(null);
+                                    }
+                                  }}
+                                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                                    isExpired
+                                      ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-sm"
+                                      : "border border-border bg-secondary/80 text-foreground hover:bg-secondary"
+                                  }`}
+                                  title={isExpired ? "Reactivate link with a fresh token" : "Invalidate old link and create a fresh new URL"}
+                                >
+                                  {processingItemId === item.id ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+                                  <span>{isExpired ? "Regenerate Link" : "Regenerate"}</span>
+                                </button>
+
+                                {/* Copy Link */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const shareUrl = createPreviewShareUrl({ ...item, lead }, { preferLiveDomain: true });
+                                    navigator.clipboard.writeText(shareUrl);
+                                    if (isExpired) {
+                                      toast.warning("Copied link, but note this link is currently EXPIRED! Tap Regenerate Link to reactivate.");
+                                    } else {
+                                      toast.success("Client preview link copied to clipboard!");
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary/80 px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary transition-colors"
+                                  title="Copy Client Preview Link"
+                                >
+                                  <Share2 className="size-3.5" /> Copy Link
+                                </button>
+
+                                {/* Download raw file */}
+                                <a 
+                                  href={`${item.file_url}?download=${encodeURIComponent(lead?.name || 'Lead')}-${item.type}.${item.file_url.split('.').pop()}`}
+                                  download
+                                  className="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary/30 px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                  title="Download raw file"
+                                >
+                                  <Download className="size-3.5" />
+                                </a>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">In progress by design team</span>
+                            )}
                           </div>
-                          {item.status === "completed" && item.file_url ? (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <button
-                                type="button"
-                                onClick={() => setPreviewWorkItem({ ...item, lead })}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground hover:bg-accent/90 transition-all shadow-sm"
-                              >
-                                <Eye className="size-3.5" /> Preview in Software
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const shareUrl = createPreviewShareUrl({ ...item, lead }, { preferLiveDomain: true });
-                                  navigator.clipboard.writeText(shareUrl);
-                                  toast.success("Client preview link copied to clipboard!");
-                                }}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary/80 px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary transition-colors"
-                                title="Copy Client Preview Link"
-                              >
-                                <Share2 className="size-3.5" /> Copy Link
-                              </button>
-                              <a 
-                                href={`${item.file_url}?download=${encodeURIComponent(lead.name || 'Lead')}-${item.type}.${item.file_url.split('.').pop()}`}
-                                download
-                                className="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary/30 px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                                title="Download raw file"
-                              >
-                                <Download className="size-3.5" />
-                              </a>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">In progress by design team</span>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -737,6 +823,9 @@ function LeadDetail() {
           onOpenChange={(v) => !v && setPreviewWorkItem(null)}
           workItem={previewWorkItem}
           onOpenWhatsApp={() => setCustomWaOpen(true)}
+          onWorkItemUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ["all-work-items", leadId] });
+          }}
         />
       )}
     </AppShell>
