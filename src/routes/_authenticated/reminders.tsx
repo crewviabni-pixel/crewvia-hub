@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { format, isToday, differenceInCalendarDays, isPast } from "date-fns";
-import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2, List, Pin, BadgeCheck, Sparkles, Zap, Loader2 } from "lucide-react";
+import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2, List, Pin, BadgeCheck, Sparkles, Zap, Loader2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { matchIntelligentSearch } from "@/lib/utils";
 
@@ -354,8 +354,34 @@ function TimelineView({
       {sorted.map((r) => {
         const time = format(new Date(r.due_at), "h a");
         const lead = leadMap.get(r.lead_id);
-        const leadActivities = activities.filter(a => a.lead_id === r.lead_id && ["call", "note", "payment", "status_change"].includes(a.kind));
-        const lastActivity = leadActivities.length > 0 ? leadActivities[0] : null;
+        const leadActivities = activities.filter(
+          (a) => a.lead_id === r.lead_id && ["call", "note", "payment", "status_change"].includes(a.kind)
+        );
+
+        // Smart activity selection:
+        // 1. Prioritize human discussion / notes (call notes or note additions),
+        // preventing generic automated strings like "Updated from call outcome" from hiding call notes.
+        const activityWithDiscussion = leadActivities.find(
+          (a) =>
+            (a.kind === "call" || a.kind === "note") &&
+            a.detail &&
+            a.detail.trim().length > 0 &&
+            a.detail !== "Updated from call outcome"
+        );
+
+        // 2. Otherwise pick the most recent call, note, or payment
+        const latestAction = leadActivities.find(
+          (a) => a.kind === "call" || a.kind === "note" || a.kind === "payment"
+        );
+
+        // 3. Fallback to status_change only if no calls, notes, or payments exist
+        const latestStatusChange = leadActivities.find((a) => a.kind === "status_change");
+
+        const lastActivity =
+          activityWithDiscussion ||
+          latestAction ||
+          latestStatusChange ||
+          (leadActivities.length > 0 ? leadActivities[0] : null);
 
         return (
           <div key={r.id} className="relative pl-6 sm:pl-8">
@@ -568,16 +594,42 @@ function ReminderCard({
           <div className="rounded-lg bg-secondary/50 p-2.5 text-sm text-secondary-foreground border border-secondary/20">
             <p className="font-medium">{getReminderContext(lead?.status)}</p>
           </div>
-          {lastActivity && (
-            <div className="rounded-lg bg-muted/30 p-2.5 text-xs text-muted-foreground border border-border/50">
-              <span className="font-semibold">{ACTIVITY_LABEL[lastActivity.kind]}:</span>{" "}
-              {lastActivity.summary}
-              {lastActivity.detail ? ` — ${lastActivity.detail}` : ""}
-              <span className="text-[10px] opacity-70 block mt-1">
-                {format(new Date(lastActivity.created_at), "MMM d, h:mm a")}
-              </span>
+          {lastActivity ? (
+            <div className="rounded-lg bg-muted/30 p-2.5 text-xs text-muted-foreground border border-border/50 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  {lastActivity.kind === "call" && <PhoneCall className="size-3 text-primary shrink-0" />}
+                  {lastActivity.kind === "note" && <FileText className="size-3 text-primary shrink-0" />}
+                  {lastActivity.kind === "payment" && <IndianRupee className="size-3 text-emerald-600 shrink-0" />}
+                  <span>{ACTIVITY_LABEL[lastActivity.kind]}: {lastActivity.summary}</span>
+                </span>
+                <span className="text-[10px] opacity-70 shrink-0">
+                  {format(new Date(lastActivity.created_at), "MMM d, h:mm a")}
+                </span>
+              </div>
+              {lastActivity.detail && lastActivity.detail !== "Updated from call outcome" ? (
+                <p className="text-foreground/90 whitespace-pre-wrap font-medium pl-3 border-l-2 border-primary/50 text-xs py-0.5 bg-background/40 rounded-r">
+                  {lastActivity.detail}
+                </p>
+              ) : lead?.notes ? (
+                <p className="text-foreground/90 whitespace-pre-wrap font-medium pl-3 border-l-2 border-primary/50 text-xs py-0.5 bg-background/40 rounded-r">
+                  {lead.notes}
+                </p>
+              ) : null}
             </div>
-          )}
+          ) : lead?.notes ? (
+            <div className="rounded-lg bg-muted/30 p-2.5 text-xs text-muted-foreground border border-border/50 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  <FileText className="size-3 text-primary shrink-0" />
+                  <span>Note</span>
+                </span>
+              </div>
+              <p className="text-foreground/90 whitespace-pre-wrap font-medium pl-3 border-l-2 border-primary/50 text-xs py-0.5 bg-background/40 rounded-r">
+                {lead.notes}
+              </p>
+            </div>
+          ) : null}
           {lead && (
             <div>
               <BniDateDisplay lead={lead} />

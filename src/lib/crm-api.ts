@@ -241,6 +241,7 @@ export async function logCall(
   reminderAt?: string
 ) {
   const now = new Date().toISOString();
+  const cleanNote = note?.trim();
   const patch: Partial<Lead> = {
     call_count: lead.call_count + 1,
     last_call_at: now,
@@ -251,27 +252,33 @@ export async function logCall(
     patch.status = nextStatus;
     if (nextStatus === "converted") patch.converted_at = now;
   }
+  if (cleanNote) {
+    patch.notes = cleanNote;
+  }
 
   const { error } = await supabase.from("leads").update(patch).eq("id", lead.id);
   if (error) throw error;
 
-  await logActivity({
-    leadId: lead.id,
-    kind: "call",
-    summary: `Call #${lead.call_count + 1} — ${outcome.replace(/_/g, " ")}`,
-    detail: note ?? null,
-    meta: { outcome, call_number: lead.call_count + 1 },
-  });
-
+  // 1. Log status change first if status changed, so call activity is logged after
+  // and has the freshest created_at timestamp in reverse-chronological queries.
   if (patch.status && patch.status !== lead.status) {
     await logActivity({
       leadId: lead.id,
       kind: "status_change",
       summary: `${statusMeta(lead.status).label} → ${statusMeta(patch.status).label}`,
-      detail: "Updated from call outcome",
+      detail: cleanNote ? `Status updated from call outcome: ${cleanNote}` : "Updated from call outcome",
       meta: { from: lead.status, to: patch.status },
     });
   }
+
+  // 2. Log call activity second so it remains the primary, latest activity carrying call notes
+  await logActivity({
+    leadId: lead.id,
+    kind: "call",
+    summary: `Call #${lead.call_count + 1} — ${outcome.replace(/_/g, " ")}`,
+    detail: cleanNote || null,
+    meta: { outcome, call_number: lead.call_count + 1 },
+  });
 
   if (reminderAt) {
     await createReminder({
