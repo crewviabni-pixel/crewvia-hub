@@ -42,7 +42,7 @@ const SQL_MIGRATION_TEXT = `-- =================================================
 -- ==============================================================================
 -- Run this in your Supabase SQL Editor once to enable unlimited 1-click designer creation.
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 -- 1. admin_create_designer
 CREATE OR REPLACE FUNCTION public.admin_create_designer(
@@ -53,7 +53,7 @@ CREATE OR REPLACE FUNCTION public.admin_create_designer(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_caller_id UUID;
@@ -107,7 +107,7 @@ BEGIN
   END IF;
 
   v_new_user_id := gen_random_uuid();
-  v_hashed_pw := crypt(p_password, gen_salt('bf'));
+  v_hashed_pw := extensions.crypt(p_password, extensions.gen_salt('bf'));
 
   -- Insert directly into auth.users with pre-confirmed email (zero email verification needed)
   INSERT INTO auth.users (
@@ -203,7 +203,7 @@ CREATE OR REPLACE FUNCTION public.admin_reset_designer_password(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_caller_id UUID;
@@ -223,7 +223,7 @@ BEGIN
     RAISE EXCEPTION 'New password must be at least 6 characters long.';
   END IF;
 
-  v_hashed_pw := crypt(p_new_password, gen_salt('bf'));
+  v_hashed_pw := extensions.crypt(p_new_password, extensions.gen_salt('bf'));
 
   -- Update encrypted password in auth.users
   UPDATE auth.users
@@ -242,7 +242,7 @@ CREATE OR REPLACE FUNCTION public.admin_delete_designer(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_caller_id UUID;

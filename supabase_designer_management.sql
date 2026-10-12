@@ -1,9 +1,10 @@
 -- ==============================================================================
--- CREWVIA BNI CRM: PRODUCTION DESIGNER USER PROVISIONING & MANAGEMENT RPC
+-- CREWVIA BNI CRM: PRODUCTION DESIGNER USER PROVISIONING & MANAGEMENT RPC (FIXED)
 -- ==============================================================================
--- Run this in your Supabase SQL Editor once to enable unlimited 1-click designer creation.
+-- Fix: Enables extensions schema in search_path and references extensions.crypt/gen_salt
+-- Run this in your Supabase SQL Editor once.
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 -- 1. admin_create_designer
 CREATE OR REPLACE FUNCTION public.admin_create_designer(
@@ -14,7 +15,7 @@ CREATE OR REPLACE FUNCTION public.admin_create_designer(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_caller_id UUID;
@@ -26,7 +27,7 @@ DECLARE
 BEGIN
   v_caller_id := auth.uid();
 
-  -- Verify that the caller is an active admin
+  -- Verify caller is admin
   IF NOT EXISTS (
     SELECT 1 FROM public.user_roles 
     WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
@@ -68,7 +69,8 @@ BEGIN
   END IF;
 
   v_new_user_id := gen_random_uuid();
-  v_hashed_pw := crypt(p_password, gen_salt('bf'));
+  -- Use extensions.crypt and extensions.gen_salt explicitly
+  v_hashed_pw := extensions.crypt(p_password, extensions.gen_salt('bf'));
 
   -- Insert directly into auth.users with pre-confirmed email (zero email verification needed)
   INSERT INTO auth.users (
@@ -124,7 +126,7 @@ BEGIN
     v_new_user_id,
     jsonb_build_object('sub', v_new_user_id::text, 'email', v_email),
     'email',
-    v_email,
+    v_new_user_id::text,
     now(),
     now(),
     now()
@@ -164,7 +166,7 @@ CREATE OR REPLACE FUNCTION public.admin_reset_designer_password(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_caller_id UUID;
@@ -172,7 +174,7 @@ DECLARE
 BEGIN
   v_caller_id := auth.uid();
 
-  -- Verify that caller is admin
+  -- Verify caller is admin
   IF NOT EXISTS (
     SELECT 1 FROM public.user_roles 
     WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
@@ -184,7 +186,7 @@ BEGIN
     RAISE EXCEPTION 'New password must be at least 6 characters long.';
   END IF;
 
-  v_hashed_pw := crypt(p_new_password, gen_salt('bf'));
+  v_hashed_pw := extensions.crypt(p_new_password, extensions.gen_salt('bf'));
 
   -- Update encrypted password in auth.users
   UPDATE auth.users
@@ -203,7 +205,7 @@ CREATE OR REPLACE FUNCTION public.admin_delete_designer(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_caller_id UUID;
@@ -226,7 +228,6 @@ BEGIN
     RAISE EXCEPTION 'Cannot delete an administrator account.';
   END IF;
 
-  -- Delete from auth.users (this cascades or we also delete from user_roles)
   DELETE FROM auth.identities WHERE user_id = p_user_id;
   DELETE FROM public.user_roles WHERE user_id = p_user_id;
   DELETE FROM auth.users WHERE id = p_user_id;
