@@ -34,6 +34,56 @@ export async function fetchDesigners() {
   return data;
 }
 
+export async function createDesigner(username: string, password: string, name?: string) {
+  const { data, error } = await (supabase as any).rpc("admin_create_designer", {
+    p_username: username.trim(),
+    p_password: password,
+    p_name: name?.trim() || "",
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to create designer");
+  }
+
+  return data;
+}
+
+export async function resetDesignerPassword(userId: string, newPassword: string) {
+  const { data, error } = await (supabase as any).rpc("admin_reset_designer_password", {
+    p_user_id: userId,
+    p_new_password: newPassword,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to reset designer password");
+  }
+
+  return data;
+}
+
+export async function deleteDesigner(userId: string) {
+  const { data, error } = await (supabase as any).rpc("admin_delete_designer", {
+    p_user_id: userId,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to delete designer");
+  }
+
+  return data;
+}
+
+export async function toggleDesignerSuspension(userId: string, isSuspended: boolean) {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .update({ is_suspended: isSuspended })
+    .eq("user_id", userId);
+
+  if (error) throw error;
+  return data;
+}
+
+
 // Work Information
 export async function saveInformation(
   leadId: string, 

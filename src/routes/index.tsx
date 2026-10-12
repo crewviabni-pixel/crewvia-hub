@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Lock } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
+import { fetchUserRole } from "@/lib/work-api";
 
 const USERNAME = "crewviabni";
 const ACCOUNT_EMAIL = "crewvia.bni@gmail.com";
@@ -11,16 +12,16 @@ export const Route = createFileRoute("/")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Crewvia BNI CRM — Team Sign In" },
+      { title: "Crewvia BNI CRM — Team & Designer Sign In" },
       {
         name: "description",
         content:
-          "Private lead management workspace for the Crewvia BNI team. Sign in to track leads, calls, payments and follow-ups.",
+          "Private portal for the Crewvia BNI team and designers. Sign in to access your workspace.",
       },
-      { property: "og:title", content: "Crewvia BNI CRM — Team Sign In" },
+      { property: "og:title", content: "Crewvia BNI CRM — Sign In" },
       {
         property: "og:description",
-        content: "Private lead management workspace for the Crewvia BNI team.",
+        content: "Private workspace and designer portal for the Crewvia BNI team.",
       },
       { name: "robots", content: "noindex" },
     ],
@@ -37,29 +38,61 @@ function SignIn() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/reminders", replace: true });
-      else setChecking(false);
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session) {
+        try {
+          const roleData = await fetchUserRole(data.session.user.id);
+          if (roleData?.role === "designer") {
+            navigate({ to: "/work", replace: true });
+            return;
+          }
+        } catch {
+          // fallback to reminders
+        }
+        navigate({ to: "/reminders", replace: true });
+      } else {
+        setChecking(false);
+      }
     });
   }, [navigate]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!username.trim() || !password) return;
+    const cleanUser = username.trim().toLowerCase().replace(/\s+/g, "");
+    if (!cleanUser || !password) return;
     
     setBusy(true);
-    const loginEmail = username.trim().toLowerCase() === USERNAME ? ACCOUNT_EMAIL : `${username.trim().toLowerCase()}@crewviabni.com`;
+    const loginEmail = cleanUser === USERNAME ? ACCOUNT_EMAIL : `${cleanUser}@crewviabni.com`;
     
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
       email: loginEmail,
       password,
     });
     setBusy(false);
+
     if (signInError) {
       setError("Incorrect username or password.");
       return;
     }
+
+    if (authData.user) {
+      try {
+        const roleData = await fetchUserRole(authData.user.id);
+        if (roleData?.is_suspended) {
+          await supabase.auth.signOut();
+          setError("This account is currently suspended. Please contact your administrator.");
+          return;
+        }
+        if (roleData?.role === "designer") {
+          navigate({ to: "/work", replace: true });
+          return;
+        }
+      } catch {
+        // Fallback default redirect
+      }
+    }
+
     navigate({ to: "/reminders", replace: true });
   }
 
@@ -126,7 +159,7 @@ function SignIn() {
         </form>
 
         <p className="mt-5 text-center text-xs text-muted-foreground">
-          Internal workspace. Access is limited to the Crewvia BNI team account.
+          Internal workspace & designer portal for Crewvia BNI.
         </p>
       </div>
     </div>
