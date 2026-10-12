@@ -4,6 +4,8 @@
 
 export interface PreviewItemPayload {
   id: string;
+  preview_token?: string | null;
+  preview_enabled?: boolean | null;
   file_url?: string | null;
   type?: string;
   lead?: {
@@ -28,14 +30,15 @@ export function createPreviewShareUrl(
   }
 
   if (!item) return origin;
-  const cleanId = (item.id || "").trim().replace(/\s+/g, "-");
+  // Prefer active preview_token, fallback to clean id
+  const token = (item.preview_token || item.id || "").trim().replace(/\s+/g, "-");
   
-  // Clean short URL: https://bni.crewvia.in/preview/<workId>
+  // Clean short URL: https://bni.crewvia.in/preview/<token>
   if (!options?.includeLegacyPayload) {
-    return `${origin}/preview/${cleanId}`;
+    return `${origin}/preview/${token}`;
   }
 
-  if (!item.file_url) return `${origin}/preview/${cleanId}`;
+  if (!item.file_url) return `${origin}/preview/${token}`;
 
   const payload = {
     f: item.file_url,
@@ -46,9 +49,9 @@ export function createPreviewShareUrl(
 
   try {
     const encoded = btoa(encodeURIComponent(JSON.stringify(payload)));
-    return `${origin}/preview/${cleanId}?p=${encoded}`;
+    return `${origin}/preview/${token}?p=${encoded}`;
   } catch {
-    return `${origin}/preview/${cleanId}?file=${encodeURIComponent(item.file_url)}&name=${encodeURIComponent(item.lead?.name || "")}`;
+    return `${origin}/preview/${token}?file=${encodeURIComponent(item.file_url)}&name=${encodeURIComponent(item.lead?.name || "")}`;
   }
 }
 

@@ -201,3 +201,43 @@ export async function fetchAllWorkItemsForLead(leadId: string) {
   if (error) throw error;
   return data;
 }
+
+/**
+ * Expire an active client preview link immediately so clients can no longer view it.
+ */
+export async function expireWorkPreview(id: string) {
+  const { data, error } = await (supabase as any)
+    .from("work_items")
+    .update({
+      preview_enabled: false,
+      preview_revoked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Regenerate a client preview link with a new unique token, invalidating any previous link.
+ */
+export async function regenerateWorkPreview(id: string) {
+  const newToken = crypto.randomUUID();
+  const { data, error } = await (supabase as any)
+    .from("work_items")
+    .update({
+      preview_token: newToken,
+      preview_enabled: true,
+      preview_revoked_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
