@@ -26,13 +26,15 @@ export const Route = createFileRoute("/preview/$workId")({
   component: PublicPreviewScreen,
 });
 
+const CREWVIA_TEAM_WHATSAPP_NUMBER = "917223804653";
+
 function PublicPreviewScreen() {
   const { workId } = useParams({ from: "/preview/$workId" });
   const search = Route.useSearch();
   // Normalize workId to handle any pasted spaces or dashes
   const cleanWorkId = (workId || "").trim().replace(/\s+/g, "-");
 
-  // Fallback payload from token or query params (allows zero-config viewing even if Supabase RLS is unconfigured)
+  // Fallback payload from legacy token or query params for backward compatibility
   const payloadFromToken = search.p ? decodePreviewPayload(search.p) : null;
   const directFile = payloadFromToken?.file_url || search.file || null;
 
@@ -51,23 +53,31 @@ function PublicPreviewScreen() {
     queryFn: async () => {
       if (!cleanWorkId) throw new Error("No work item specified.");
 
-      // Try fetching via direct query
+      // 1. Try fetching via direct query
       const { data, error } = await supabase
         .from("work_items")
         .select("id, type, status, file_url, created_at, leads(id, name, company)")
         .eq("id", cleanWorkId)
         .maybeSingle();
 
-      if (error) {
-        // Fallback to RPC if configured
+      if (data && data.file_url) {
+        return data;
+      }
+
+      // 2. Fallback to RPC if configured
+      try {
         const { data: rpcData, error: rpcError } = await (supabase as any).rpc(
           "get_public_work_preview",
           { p_work_id: cleanWorkId }
         );
-        if (rpcError) throw error;
-        return rpcData;
+        if (!rpcError && rpcData && rpcData.file_url) {
+          return rpcData;
+        }
+      } catch (rpcErr) {
+        console.warn("RPC query fallback attempt:", rpcErr);
       }
 
+      if (error) throw error;
       return data;
     },
     enabled: !directFile && !!cleanWorkId,
@@ -104,7 +114,7 @@ function PublicPreviewScreen() {
 
           <div className="flex items-center gap-3">
             <a
-              href="https://wa.me/919872399427?text=Hi%20Crewvia%20team,%20I%20am%20reviewing%20my%20presentation."
+              href={`https://wa.me/${CREWVIA_TEAM_WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hi Crewvia team, I am reviewing my ${typeLabel.toLowerCase()} (${cleanWorkId}).`)}`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md shadow-emerald-900/30"
@@ -132,10 +142,10 @@ function PublicPreviewScreen() {
               This preview link has either expired, is currently in progress by our design team, or is invalid.
             </p>
             <p className="mt-2 text-[11px] text-neutral-500 leading-relaxed">
-              If you received this link on WhatsApp, please tap the full link shared by your Crewvia team.
+              If you have any questions or need immediate assistance, please reach out to our team directly.
             </p>
             <a
-              href="https://wa.me/919872399427"
+              href={`https://wa.me/${CREWVIA_TEAM_WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hi Crewvia team, I need assistance with preview ${cleanWorkId}.`)}`}
               target="_blank"
               rel="noreferrer"
               className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-accent text-white hover:bg-accent/90 transition-all shadow-lg shadow-accent/20"
@@ -197,7 +207,7 @@ function PublicPreviewScreen() {
               </div>
 
               <a
-                href={`https://wa.me/919872399427?text=${encodeURIComponent(`Hi Crewvia team, I have reviewed the ${typeLabel.toLowerCase()} for ${leadName}. Here is my feedback:`)}`}
+                href={`https://wa.me/${CREWVIA_TEAM_WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hi Crewvia team, I have reviewed the ${typeLabel.toLowerCase()} for ${leadName}. Here is my feedback:`)}`}
                 target="_blank"
                 rel="noreferrer"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-lg shadow-emerald-950"

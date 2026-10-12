@@ -16,7 +16,7 @@ export const LIVE_PROJECT_URL = "https://bni.crewvia.in";
 
 export function createPreviewShareUrl(
   item: PreviewItemPayload,
-  options?: { preferLiveDomain?: boolean }
+  options?: { preferLiveDomain?: boolean; includeLegacyPayload?: boolean }
 ): string {
   let origin = typeof window !== "undefined" && window.location.origin && window.location.origin !== "null"
     ? window.location.origin
@@ -29,6 +29,12 @@ export function createPreviewShareUrl(
 
   if (!item) return origin;
   const cleanId = (item.id || "").trim().replace(/\s+/g, "-");
+  
+  // Clean short URL: https://bni.crewvia.in/preview/<workId>
+  if (!options?.includeLegacyPayload) {
+    return `${origin}/preview/${cleanId}`;
+  }
+
   if (!item.file_url) return `${origin}/preview/${cleanId}`;
 
   const payload = {

@@ -4,6 +4,7 @@
 -- ==============================================================================
 
 -- 1. Allow unauthenticated visitors to read completed work items
+DROP POLICY IF EXISTS "Public can view completed work items" ON public.work_items;
 CREATE POLICY "Public can view completed work items" 
 ON public.work_items 
 FOR SELECT 
@@ -11,6 +12,7 @@ TO anon
 USING (status = 'completed');
 
 -- 2. Allow unauthenticated visitors to read basic client information for completed work
+DROP POLICY IF EXISTS "Public can view basic lead info for completed work" ON public.leads;
 CREATE POLICY "Public can view basic lead info for completed work" 
 ON public.leads 
 FOR SELECT 
