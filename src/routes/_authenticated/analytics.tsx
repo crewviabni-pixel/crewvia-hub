@@ -16,6 +16,9 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  FunnelChart,
+  Funnel,
+  LabelList
 } from "recharts";
 
 import { AppShell } from "@/components/AppShell";
@@ -122,6 +125,46 @@ function Analytics() {
       converted
     : 0;
 
+  const PROBABILITIES: Record<string, number> = {
+    take_info: 0.1,
+    info_taken: 0.2,
+    draft_sent: 0.4,
+    approved: 0.6,
+    advance_received: 0.8,
+    presentation_sent: 0.9,
+    converted: 1.0,
+    lost: 0.0,
+  };
+
+  const forecastedRevenue = scopedLeads.reduce((sum, lead) => {
+    const prob = PROBABILITIES[lead.status] ?? 0;
+    const val = Number(lead.deal_value) || 0;
+    return sum + (val * prob);
+  }, 0);
+
+  const funnelData = useMemo(() => {
+    const orderedStatuses = [
+      { id: "take_info", label: "Take Info" },
+      { id: "info_taken", label: "Info Taken" },
+      { id: "draft_sent", label: "Draft Sent" },
+      { id: "approved", label: "Approved" },
+      { id: "presentation_sent", label: "Presentation" },
+      { id: "converted", label: "Converted" },
+    ];
+    // To create a true funnel shape, we calculate cumulative counts (how many leads reached AT LEAST this stage)
+    // We'll estimate this by summing the counts of the current stage + all subsequent stages.
+    const counts = orderedStatuses.map(s => scopedLeads.filter(l => l.status === s.id).length);
+    return orderedStatuses.map((s, i) => {
+      // cumulative sum from index i to end (assuming linear progression for active/converted leads)
+      const passed = counts.slice(i).reduce((a, b) => a + b, 0);
+      return {
+        name: s.label,
+        value: passed,
+        fill: "var(--primary)"
+      };
+    }).filter(d => d.value > 0);
+  }, [scopedLeads]);
+
   const statusData = LEAD_STATUSES.map((s) => ({
     name: s.label,
     value: scopedLeads.filter((l) => l.status === s.value).length,
@@ -169,7 +212,7 @@ function Analytics() {
         <select
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
-          className="rounded-md border border-input bg-background px-2.5 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-ring"
+          className="h-8.5 rounded-lg border border-border/80 bg-background/60 px-2.5 text-xs font-medium outline-none focus:ring-1 focus:ring-ring whitespace-nowrap shrink-0 transition-colors"
         >
           {RANGES.map((r) => (
             <option key={r.days} value={r.days}>
@@ -206,6 +249,7 @@ function Analytics() {
             <StatCard label="Collected" value={money(collected)} hint={`${scopedPayments.length} payments`} />
             <StatCard label="Outstanding" value={money(outstanding)} hint="Active leads only" />
             <StatCard label="Pipeline value" value={money(pipelineValue)} hint={`${money(lossValue)} lost out of pipeline`} />
+            <StatCard label="Forecasted Revenue" value={money(forecastedRevenue)} hint="Weighted by stage probability" />
             <StatCard label="Calls logged" value={String(callsInRange)} />
             <StatCard label="Avg deal size" value={money(avgDeal)} />
             <StatCard label="Overdue reminders" value={String(overdue)} hint={`${lost} leads lost`} />
@@ -238,6 +282,25 @@ function Analytics() {
           </ResponsiveContainer>
         </Panel>
 
+        <Panel title="Sales Funnel (Conversion Drop-off)">
+          {funnelData.length === 0 ? (
+            <Empty />
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <FunnelChart>
+                <Tooltip formatter={(value: number) => [value, "Leads passed"]}/>
+                <Funnel
+                  dataKey="value"
+                  data={funnelData}
+                  isAnimationActive
+                >
+                  <LabelList position="right" fill="var(--foreground)" stroke="none" dataKey="name" />
+                </Funnel>
+              </FunnelChart>
+            </ResponsiveContainer>
+          )}
+        </Panel>
+        
         <Panel title="Pipeline by status">
           {statusData.length === 0 ? (
             <Empty />

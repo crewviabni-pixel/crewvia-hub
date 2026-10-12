@@ -2,50 +2,66 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { BellRing, IndianRupee, MessageCircle, Phone, PhoneCall } from "lucide-react";
+import { BellRing, IndianRupee, MessageCircle, Phone, PhoneCall, Brain, Zap, Loader2 } from "lucide-react";
+import { calculateLeadScore } from "@/lib/ai-scoring";
 
 import { PaymentPill, StatusPill, BniDateDisplay } from "@/components/crm-ui";
 import { StatusChangeDialog, useCrmRefresh } from "@/components/lead-dialogs";
-import { LEAD_STATUSES, initials, money, telHref, waHref, type Lead, type LeadStatus } from "@/lib/crm";
-import { logWhatsapp } from "@/lib/crm-api";
+import { LEAD_STATUSES, initials, money, telHref, type Lead, type LeadStatus } from "@/lib/crm";
 
 export function LeadCard({
   lead,
   onCall,
   onPay,
   onRemind,
+  selected,
+  onSelect,
 }: {
   lead: Lead;
   onCall: (lead: Lead) => void;
   onPay: (lead: Lead) => void;
   onRemind: (lead: Lead) => void;
+  selected?: boolean;
+  onSelect?: (leadId: string, checked: boolean) => void;
 }) {
   const refresh = useCrmRefresh();
   const [statusTarget, setStatusTarget] = useState<LeadStatus | null>(null);
 
-  const whatsapp = useMutation({
-    mutationFn: () => logWhatsapp(lead),
-    onSuccess: refresh,
-  });
-
   const pending = Number(lead.deal_value) - Number(lead.amount_paid);
   const reminderDue = lead.next_reminder_at ? new Date(lead.next_reminder_at) : null;
   const overdue = reminderDue ? reminderDue.getTime() < Date.now() : false;
+  
+  const ai = calculateLeadScore(lead);
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-start gap-3">
+        {onSelect && (
+          <div className="pt-2.5">
+            <input 
+              type="checkbox" 
+              checked={selected}
+              onChange={(e) => onSelect(lead.id, e.target.checked)}
+              className="size-4 cursor-pointer rounded border-border text-primary focus:ring-primary"
+            />
+          </div>
+        )}
         <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary font-display text-sm font-bold text-secondary-foreground">
           {initials(lead.name || "#")}
         </span>
         <div className="min-w-0 flex-1">
-          <Link
-            to="/leads/$leadId"
-            params={{ leadId: lead.id }}
-            className="font-display text-base font-semibold hover:underline"
-          >
-            {lead.name || lead.phone}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/leads/$leadId"
+              params={{ leadId: lead.id }}
+              className="font-display text-base font-semibold hover:underline"
+            >
+              {lead.name || lead.phone}
+            </Link>
+            <div className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold shadow-sm ${ai.color}`} title={`AI NBA: ${ai.nextBestAction}`}>
+              <Brain className="size-3" /> {ai.score}
+            </div>
+          </div>
           <p className="truncate text-sm text-muted-foreground">
             {lead.phone}
             {lead.company ? ` · ${lead.company}` : ""}
@@ -66,6 +82,18 @@ export function LeadCard({
           <div className="mt-1">
             <BniDateDisplay lead={lead} />
           </div>
+          {lead.custom_data && typeof lead.custom_data === 'object' && Object.keys(lead.custom_data as Record<string, any>).length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {Object.entries(lead.custom_data as Record<string, any>).map(([key, val]) => {
+                if (!val) return null;
+                return (
+                  <span key={key} className="rounded-md bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
+                    {String(val)}
+                  </span>
+                )
+              })}
+            </div>
+          )}
         </div>
         <div className="hidden text-right sm:block space-y-0.5">
           <p className="font-display text-sm font-bold">{money(lead.deal_value)} <span className="text-[10px] font-normal text-muted-foreground uppercase tracking-wider ml-1">Total</span></p>
@@ -99,15 +127,6 @@ export function LeadCard({
           className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
         >
           <Phone className="size-3.5" /> Call
-        </a>
-        <a
-          href={waHref(lead.phone, `Hi${lead.name ? ` ${lead.name.split(" ")[0]}` : ""}, this is Crewvia BNI.`)}
-          target="whatsapp"
-          rel="noreferrer"
-          onClick={() => whatsapp.mutate()}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900"
-        >
-          <MessageCircle className="size-3.5" /> WhatsApp
         </a>
         <button
           onClick={() => onCall(lead)}

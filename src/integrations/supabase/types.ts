@@ -34,6 +34,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      custom_fields: {
+        Row: {
+          created_at: string
+          id: string
+          workspace_id: string
+          name: string
+          field_type: "text" | "number" | "date" | "select"
+          options: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          workspace_id: string
+          name: string
+          field_type: "text" | "number" | "date" | "select"
+          options?: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          workspace_id?: string
+          name?: string
+          field_type?: "text" | "number" | "date" | "select"
+          options?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_fields_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       activities: {
         Row: {
           actor_id: string | null
@@ -205,6 +240,7 @@ export type Database = {
           company: string | null
           converted_at: string | null
           created_at: string
+          custom_data: Json | null
           deal_value: number
           email: string | null
           id: string
@@ -232,6 +268,7 @@ export type Database = {
           company?: string | null
           converted_at?: string | null
           created_at?: string
+          custom_data?: Json | null
           deal_value?: number
           email?: string | null
           id?: string
@@ -259,6 +296,7 @@ export type Database = {
           company?: string | null
           converted_at?: string | null
           created_at?: string
+          custom_data?: Json | null
           deal_value?: number
           email?: string | null
           id?: string

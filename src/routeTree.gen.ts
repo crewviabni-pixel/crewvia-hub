@@ -19,6 +19,7 @@ import { Route as AuthenticatedOutboxRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedRemindersRouteImport } from './routes/_authenticated/reminders'
 import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
 import { Route as AuthenticatedWorkRouteImport } from './routes/_authenticated/work'
+import { Route as PreviewWorkIdRouteImport } from './routes/preview.$workId'
 import { Route as AuthenticatedLeadsLeadIdRouteImport } from './routes/_authenticated/leads.$leadId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -70,6 +71,11 @@ const AuthenticatedWorkRoute = AuthenticatedWorkRouteImport.update({
   path: '/work',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const PreviewWorkIdRoute = PreviewWorkIdRouteImport.update({
+  id: '/preview/$workId',
+  path: '/preview/$workId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedLeadsLeadIdRoute =
   AuthenticatedLeadsLeadIdRouteImport.update({
     id: '/$leadId',
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/reminders': typeof AuthenticatedRemindersRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/work': typeof AuthenticatedWorkRoute
+  '/preview/$workId': typeof PreviewWorkIdRoute
   '/leads/$leadId': typeof AuthenticatedLeadsLeadIdRoute
 }
 export interface FileRoutesByTo {
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/reminders': typeof AuthenticatedRemindersRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/work': typeof AuthenticatedWorkRoute
+  '/preview/$workId': typeof PreviewWorkIdRoute
   '/leads/$leadId': typeof AuthenticatedLeadsLeadIdRoute
 }
 export interface FileRoutesById {
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/_authenticated/reminders': typeof AuthenticatedRemindersRoute
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
   '/_authenticated/work': typeof AuthenticatedWorkRoute
+  '/preview/$workId': typeof PreviewWorkIdRoute
   '/_authenticated/leads/$leadId': typeof AuthenticatedLeadsLeadIdRoute
 }
 export interface FileRouteTypes {
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/reminders'
     | '/templates'
     | '/work'
+    | '/preview/$workId'
     | '/leads/$leadId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -139,6 +149,7 @@ export interface FileRouteTypes {
     | '/reminders'
     | '/templates'
     | '/work'
+    | '/preview/$workId'
     | '/leads/$leadId'
   id:
     | '__root__'
@@ -152,12 +163,14 @@ export interface FileRouteTypes {
     | '/_authenticated/reminders'
     | '/_authenticated/templates'
     | '/_authenticated/work'
+    | '/preview/$workId'
     | '/_authenticated/leads/$leadId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  PreviewWorkIdRoute: typeof PreviewWorkIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWorkRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/preview/$workId': {
+      id: '/preview/$workId'
+      path: '/preview/$workId'
+      fullPath: '/preview/$workId'
+      preLoaderRoute: typeof PreviewWorkIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/leads/$leadId': {
       id: '/_authenticated/leads/$leadId'
       path: '/$leadId'
@@ -281,6 +301,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  PreviewWorkIdRoute: PreviewWorkIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

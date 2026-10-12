@@ -11,6 +11,7 @@ import {
   type Payment,
   type PaymentCategory,
   type Reminder,
+  type CustomField,
 } from "@/lib/crm";
 
 /* ---------------------------------- reads ----------------- */
@@ -22,6 +23,16 @@ export async function fetchLeads(workspaceId?: string): Promise<Lead[]> {
     .order("updated_at", { ascending: false });
   if (workspaceId) q = q.eq("workspace_id", workspaceId);
   const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchCustomFields(workspaceId: string): Promise<CustomField[]> {
+  const { data, error } = await supabase
+    .from("custom_fields")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: true });
   if (error) throw error;
   return data ?? [];
 }
@@ -97,25 +108,49 @@ export type NewLeadInput = {
   bni_presentation_date?: string | null;
   firstReminderAt?: string | null;
   workspace_id?: string | null;
+  custom_data?: any;
 };
 
 export async function createLead(input: NewLeadInput): Promise<Lead> {
-  const { firstReminderAt, ...rest } = input;
-  const { data, error } = await supabase
+  const { firstReminderAt, custom_data, ...rest } = input;
+  const basePayload: any = {
+    ...rest,
+    email: rest.email || null,
+    company: rest.company || null,
+    city: rest.city || null,
+    service: rest.service || null,
+    notes: rest.notes || null,
+    next_reminder_at: firstReminderAt ?? null,
+    workspace_id: rest.workspace_id ?? null,
+  };
+
+  let insertPayload: any = { ...basePayload };
+  if (custom_data && typeof custom_data === "object" && Object.keys(custom_data).length > 0) {
+    insertPayload.custom_data = custom_data;
+  }
+
+  let result = await supabase
     .from("leads")
-    .insert({
-      ...rest,
-      email: rest.email || null,
-      company: rest.company || null,
-      city: rest.city || null,
-      service: rest.service || null,
-      notes: rest.notes || null,
-      next_reminder_at: firstReminderAt ?? null,
-      workspace_id: rest.workspace_id ?? null,
-    })
+    .insert(insertPayload)
     .select()
     .single();
-  if (error) throw error;
+
+  // If custom_data column does not exist in Supabase schema (PGRST204), fallback cleanly
+  if (result.error && (result.error.code === "PGRST204" || result.error.message?.includes("custom_data"))) {
+    console.warn("custom_data column not in Supabase schema cache; falling back safely.");
+    let notes = basePayload.notes || "";
+    if (custom_data && typeof custom_data === "object" && Object.keys(custom_data).length > 0) {
+      const customNotes = Object.entries(custom_data)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("\n");
+      notes = notes ? `${notes}\n\n[Custom Fields]\n${customNotes}` : `[Custom Fields]\n${customNotes}`;
+    }
+    const fallbackPayload = { ...basePayload, notes: notes || null };
+    result = await supabase.from("leads").insert(fallbackPayload).select().single();
+  }
+
+  if (result.error) throw result.error;
+  const data = result.data as Lead;
 
   await logActivity({
     leadId: data.id,
@@ -140,8 +175,16 @@ export async function updateLeadFields(
   patch: Partial<Lead>,
   summary = "Lead details updated",
 ) {
-  const { error } = await supabase.from("leads").update(patch).eq("id", lead.id);
-  if (error) throw error;
+  let { error } = await supabase.from("leads").update(patch).eq("id", lead.id);
+  if (error && (error.code === "PGRST204" || error.message?.includes("custom_data"))) {
+    const { custom_data, ...restPatch } = patch as any;
+    if (Object.keys(restPatch).length > 0) {
+      const retry = await supabase.from("leads").update(restPatch).eq("id", lead.id);
+      if (retry.error) throw retry.error;
+    }
+  } else if (error) {
+    throw error;
+  }
   const changed = Object.keys(patch).join(", ");
   await logActivity({
     leadId: lead.id,
@@ -288,6 +331,22 @@ export async function logWhatsapp(lead: Lead) {
   await logActivity({ leadId: lead.id, kind: "whatsapp", summary: "WhatsApp message opened" });
 }
 
+export async function logAutomatedWhatsapp(lead: Lead, messagePreview?: string) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("leads")
+    .update({ last_contacted_at: now })
+    .eq("id", lead.id);
+  if (error) throw error;
+  await logActivity({
+    leadId: lead.id,
+    kind: "whatsapp",
+    summary: "WhatsApp auto-sent via Bridge",
+    detail: messagePreview ? (messagePreview.length > 140 ? messagePreview.slice(0, 140) + "..." : messagePreview) : null,
+    meta: { channel: "bridge_extension", status: "sent", sent_at: now },
+  });
+}
+
 /* -------------------------------- reminders -------------------------------- */
 
 export async function createReminder(input: { leadId: string; title: string; dueAt: string }) {
@@ -404,6 +463,52 @@ export async function fetchMessageTemplates(workspaceId?: string) {
   const { data, error } = await q;
   if (error) throw error;
   return data;
+}
+
+export async function fetchTemplatesForStatus(status: LeadStatus, workspaceId?: string) {
+  let q = supabase
+    .from("message_templates")
+    .select("*")
+    .eq("status", status)
+    .eq("is_active", true)
+    .order("followup_order", { ascending: true });
+  if (workspaceId) q = q.eq("workspace_id", workspaceId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data || []) as MessageTemplate[];
+}
+
+export async function fetchTemplatesForStatusAndScenario(
+  status: LeadStatus,
+  scenario?: CallOutcome,
+  workspaceId?: string
+) {
+  let q = supabase
+    .from("message_templates")
+    .select("*")
+    .eq("status", status)
+    .eq("is_active", true);
+  if (scenario) q = q.eq("scenario", scenario);
+  if (workspaceId) q = q.eq("workspace_id", workspaceId);
+  q = q.order("followup_order", { ascending: true });
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data || []) as MessageTemplate[];
+}
+
+export async function fetchLeadTemplateProgress(
+  leadId: string,
+  status: LeadStatus,
+  scenario?: CallOutcome
+) {
+  let q = supabase
+    .from("lead_template_progress")
+    .select("*")
+    .eq("lead_id", leadId)
+    .eq("status", status);
+  if (scenario) q = q.eq("scenario", scenario);
+  const { data } = await q;
+  return (data || []) as { lead_id: string; status: LeadStatus; scenario: CallOutcome; last_order_used: number }[];
 }
 
 export async function saveMessageTemplate(

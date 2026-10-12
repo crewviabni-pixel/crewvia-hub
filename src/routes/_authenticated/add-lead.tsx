@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { presetDates, toLocalInputValue, useCrmRefresh } from "@/components/lead-dialogs";
 import { LEAD_SOURCES, LEAD_STATUSES, type LeadStatus } from "@/lib/crm";
-import { createLead } from "@/lib/crm-api";
+import { createLead, fetchCustomFields } from "@/lib/crm-api";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -34,6 +34,13 @@ function AddLead() {
   const refresh = useCrmRefresh();
   const { activeWorkspaceId } = useWorkspace();
 
+
+  const [customData, setCustomData] = useState<Record<string, any>>({});
+  const { data: customFields } = useQuery({
+    queryKey: ["customFields", activeWorkspaceId],
+    queryFn: () => fetchCustomFields(activeWorkspaceId as string),
+    enabled: !!activeWorkspaceId
+  });
 
   const [form, setForm] = useState({
     name: "",
@@ -98,6 +105,7 @@ function AddLead() {
         bni_presentation_date: form.bni_presentation_date || null,
         firstReminderAt: reminderAt ? new Date(reminderAt).toISOString() : null,
         workspace_id: activeWorkspaceId || null,
+        custom_data: customData,
       });
     },
     onSuccess: (lead) => {

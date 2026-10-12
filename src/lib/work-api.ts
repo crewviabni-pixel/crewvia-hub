@@ -123,12 +123,33 @@ export async function fetchWorkItems(type: WorkType, workspaceId?: string) {
   const { data, error } = await q;
 
   if (error) throw error;
+  if (!data || data.length === 0) return [];
+
+  // Batch fetch lead_information so card previews have actual info_text
+  const leadIds = Array.from(new Set(data.map((r: any) => r.lead_id).filter(Boolean)));
+  let infoMap: Record<string, string> = {};
+  if (leadIds.length > 0) {
+    const { data: infos } = await supabase
+      .from("lead_information")
+      .select("lead_id, info_text")
+      .in("lead_id", leadIds);
+    if (infos) {
+      infos.forEach((inf: any) => {
+        if (inf.lead_id && inf.info_text) {
+          infoMap[inf.lead_id] = inf.info_text;
+        }
+      });
+    }
+  }
+
   return data.map((row: any) => ({
     ...row,
     lead: {
       ...row.designer_leads_view,
+      id: row.lead_id || row.designer_leads_view?.id,
       name: row.leads?.name,
-      phone: row.leads?.phone
+      phone: row.leads?.phone,
+      info_text: infoMap[row.lead_id] || row.designer_leads_view?.notes || ""
     }
   }));
 }

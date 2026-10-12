@@ -19,6 +19,7 @@ export type LeadInformationImage = Database["public"]["Tables"]["lead_informatio
 export type WorkItem = Database["public"]["Tables"]["work_items"]["Row"];
 export type DesignerLead = Database["public"]["Views"]["designer_leads_view"]["Row"];
 export type Workspace = Database["public"]["Tables"]["workspaces"]["Row"];
+export type CustomField = Database["public"]["Tables"]["custom_fields"]["Row"];
 
 export type LeadStatus = Database["public"]["Enums"]["lead_status"];
 export type PaymentStatus = Database["public"]["Enums"]["payment_status"];
@@ -185,20 +186,42 @@ export const ACTIVITY_LABEL: Record<ActivityKind, string> = {
   whatsapp: "WhatsApp opened",
 };
 
-export function renderTemplate(template: string, lead: Partial<Lead> | null) {
+export interface RenderTemplateOptions {
+  draftUrl?: string | null;
+  presentationUrl?: string | null;
+}
+
+export function renderTemplate(
+  template: string,
+  lead: Partial<Lead> | null,
+  options?: RenderTemplateOptions
+) {
   if (!lead) return template;
   
   return template.replace(/\$\{([^}]+)\}/g, (match, variable) => {
-    if (variable === "name") {
+    const key = variable.trim().toLowerCase();
+    if (key === "name") {
       if (!lead.name || lead.name.trim() === "") {
         return "Sir/Madam";
       }
       return lead.name.split(" ")[0] || "Sir/Madam"; // First name
     }
-    if (variable === "company") return lead.company || "your company";
-    if (variable === "city") return lead.city || "your city";
+    if (key === "fullname" || key === "full_name") return lead.name || "Client";
+    if (key === "company") return lead.company || "your company";
+    if (key === "city") return lead.city || "your city";
+    if (key === "phone") return lead.phone || "";
+
+    // Draft link replacement
+    if (key === "draft" || key === "draft_link" || key === "draftlink") {
+      return options?.draftUrl || "[Draft Preview Link]";
+    }
+
+    // Presentation link replacement
+    if (key === "presentation" || key === "presentation_link" || key === "presentationlink") {
+      return options?.presentationUrl || "[Presentation Preview Link]";
+    }
     
-    // Unrecognized variables are left as is, or you could return an empty string
+    // Unrecognized variables are left as is
     return match;
   });
 }

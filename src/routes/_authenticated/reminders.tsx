@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { format, isToday, differenceInCalendarDays, isPast } from "date-fns";
-import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2, List, Pin, BadgeCheck, Sparkles } from "lucide-react";
+import { Check, Clock, MessageCircle, Pencil, Phone, Send, PhoneCall, IndianRupee, Trash2, List, Pin, BadgeCheck, Sparkles, Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { matchIntelligentSearch } from "@/lib/utils";
 
@@ -629,14 +629,6 @@ function ReminderCard({
                   <Phone className="size-3.5" /> Call
                 </a>
                 <QuickMessageMenu lead={lead} />
-                <a
-                  href={waHref(lead.phone, `Hi${lead.name ? ` ${lead.name.split(" ")[0]}` : ""}, this is Crewvia BNI.`)}
-                  target="whatsapp"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition-colors hover:bg-emerald-100"
-                >
-                  <MessageCircle className="size-3.5" /> WA
-                </a>
               </>
             ) : null}
           </div>

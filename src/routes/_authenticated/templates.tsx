@@ -194,30 +194,76 @@ function TemplateEditor({ template, onClose, onSave }: { template: Partial<Messa
           </div>
 
           <div>
-            <label className="mb-1.5 flex justify-between text-xs font-medium text-muted-foreground">
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1 text-xs font-medium text-muted-foreground">
               <span>Message Content</span>
-              <span>Available variables: {'${name}, ${company}, ${city}'}</span>
-            </label>
+              <span>Click a variable to insert:</span>
+            </div>
+            
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {[
+                { tag: "${name}", label: "${name} (First Name)", desc: "e.g. Rahul" },
+                { tag: "${draft}", label: "✨ ${draft} (Preview Link)", desc: "Auto-replaces with client's draft link" },
+                { tag: "${presentation}", label: "✨ ${presentation} (Preview Link)", desc: "Auto-replaces with presentation link" },
+                { tag: "${fullname}", label: "${fullname}", desc: "Full client name" },
+                { tag: "${company}", label: "${company}", desc: "Company name" },
+                { tag: "${city}", label: "${city}", desc: "City" },
+                { tag: "${phone}", label: "${phone}", desc: "Phone number" },
+              ].map((v) => (
+                <button
+                  key={v.tag}
+                  type="button"
+                  onClick={() => {
+                    const current = form.message || "";
+                    set("message", current ? `${current} ${v.tag}` : v.tag);
+                  }}
+                  title={v.desc}
+                  className="rounded border border-border bg-secondary/50 px-2 py-0.5 text-[11px] font-mono text-secondary-foreground hover:bg-secondary hover:border-primary/40 transition-colors"
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+
             <textarea 
               className={fieldClass} 
-              rows={5} 
+              rows={6} 
               value={form.message} 
               onChange={e => set("message", e.target.value)}
-              placeholder="Hi ${name}, I tried reaching you..."
+              placeholder="Hi ${name}, your presentation draft is ready for review! 🚀&#10;&#10;Preview it here:&#10;👉 ${draft}&#10;&#10;Please let us know your feedback!"
             />
+
+            {(form.status === "info_taken" || form.status === "advance_received") && (
+              <p className="mt-1.5 text-xs text-primary font-medium flex items-center gap-1">
+                💡 Tip: Use <code className="bg-primary/10 px-1 py-0.5 rounded text-[11px] font-bold">{"${draft}"}</code> or <code className="bg-primary/10 px-1 py-0.5 rounded text-[11px] font-bold">{"${presentation}"}</code>. When sending from reminders, it will automatically be replaced with the client's actual, secure preview link!
+              </p>
+            )}
           </div>
 
           <div className="rounded-lg bg-secondary/30 border border-border p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Live Preview (with fake lead)</h3>
-            <div className="text-sm whitespace-pre-wrap">
-              {renderTemplate(form.message || "", { name: "Rahul", company: "Tech Inc", city: "Mumbai" })}
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Live Preview (Sample Client)</h3>
+            <div className="text-sm whitespace-pre-wrap font-sans text-foreground">
+              {renderTemplate(
+                form.message || "",
+                { name: "Rahul", company: "Tech Inc", city: "Mumbai", phone: "9876543210" },
+                {
+                  draftUrl: "https://bni.crewvia.in/preview/sample-draft-uuid?p=demo",
+                  presentationUrl: "https://bni.crewvia.in/preview/sample-pres-uuid?p=demo",
+                }
+              )}
             </div>
           </div>
           
           <div className="rounded-lg bg-secondary/30 border border-border p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Live Preview (no name)</h3>
-            <div className="text-sm whitespace-pre-wrap">
-              {renderTemplate(form.message || "", { name: "" })}
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Live Preview (Fallback Client)</h3>
+            <div className="text-sm whitespace-pre-wrap font-sans text-muted-foreground">
+              {renderTemplate(
+                form.message || "",
+                { name: "" },
+                {
+                  draftUrl: "https://bni.crewvia.in/preview/sample-draft-uuid?p=demo",
+                  presentationUrl: "https://bni.crewvia.in/preview/sample-pres-uuid?p=demo",
+                }
+              )}
             </div>
           </div>
           
