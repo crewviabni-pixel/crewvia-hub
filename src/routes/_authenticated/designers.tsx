@@ -109,7 +109,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, auth, extensions
-AS $
+AS $$
 DECLARE
   v_caller_id UUID;
   v_new_user_id UUID;
@@ -277,7 +277,7 @@ BEGIN
     'email', v_email
   );
 END;
-$;
+$$;
 
 -- 3. admin_assign_designer_workspaces
 CREATE OR REPLACE FUNCTION public.admin_assign_designer_workspaces(
@@ -288,7 +288,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, auth, extensions
-AS $
+AS $$
 DECLARE
   v_caller_id UUID;
   v_ws_id UUID;
@@ -320,7 +320,7 @@ BEGIN
 
   RETURN jsonb_build_object('success', true, 'user_id', p_user_id, 'assigned_count', coalesce(array_length(p_workspace_ids, 1), 0));
 END;
-$;
+$$;
 
 -- 4. admin_reset_designer_password
 CREATE OR REPLACE FUNCTION public.admin_reset_designer_password(
@@ -331,7 +331,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, auth, extensions
-AS $
+AS $$
 DECLARE
   v_caller_id UUID;
   v_hashed_pw TEXT;
@@ -359,7 +359,7 @@ BEGIN
 
   RETURN jsonb_build_object('success', true, 'user_id', p_user_id);
 END;
-$;
+$$;
 
 -- 5. admin_delete_designer
 CREATE OR REPLACE FUNCTION public.admin_delete_designer(
@@ -369,7 +369,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, auth, extensions
-AS $
+AS $$
 DECLARE
   v_caller_id UUID;
 BEGIN
@@ -398,7 +398,7 @@ BEGIN
 
   RETURN jsonb_build_object('success', true, 'user_id', p_user_id);
 END;
-$;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.admin_create_designer(TEXT, TEXT, TEXT, UUID[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_assign_designer_workspaces(UUID, UUID[]) TO authenticated;
@@ -775,6 +775,7 @@ function DesignersScreen() {
           target={manageCampaignsTarget}
           workspaces={workspaces}
           onClose={() => setManageCampaignsTarget(null)}
+          onSqlSetupRequired={() => setSqlSetupModalOpen(true)}
           onUpdated={() => {
             refetchMappings();
             queryClient.invalidateQueries({ queryKey: ["designer-workspaces-mapping"] });
@@ -1396,11 +1397,13 @@ function ManageDesignerCampaignsDialog({
   target,
   workspaces,
   onClose,
+  onSqlSetupRequired,
   onUpdated,
 }: {
   target: { userId: string; username: string; currentWorkspaceIds: string[] };
   workspaces: any[];
   onClose: () => void;
+  onSqlSetupRequired: () => void;
   onUpdated: () => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>(target.currentWorkspaceIds);
@@ -1415,7 +1418,17 @@ function ManageDesignerCampaignsDialog({
       onClose();
     },
     onError: (err: any) => {
-      toast.error(err.message || "Failed to update assigned campaigns");
+      if (
+        err.message === "SQL_SETUP_REQUIRED" ||
+        err.code === "SQL_SETUP_REQUIRED" ||
+        err.message?.includes("schema cache") ||
+        err.message?.includes("designer_workspaces")
+      ) {
+        onClose();
+        onSqlSetupRequired();
+      } else {
+        toast.error(err.message || "Failed to update assigned campaigns");
+      }
     },
   });
 

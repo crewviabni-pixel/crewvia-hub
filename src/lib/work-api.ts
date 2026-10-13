@@ -111,12 +111,38 @@ export async function assignDesignerWorkspaces(userId: string, workspaceIds: str
 
   if (!rpcErr) return;
 
-  // Fallback: direct table operations if RPC not yet run in SQL editor
-  await (supabase as any).from("designer_workspaces").delete().eq("user_id", userId);
+  // If RPC is missing or schema cache error, try direct table operation as fallback
+  const { error: deleteErr } = await (supabase as any).from("designer_workspaces").delete().eq("user_id", userId);
+  if (deleteErr) {
+    if (
+      deleteErr.code === "PGRST205" ||
+      deleteErr.message?.includes("schema cache") ||
+      deleteErr.message?.includes("designer_workspaces") ||
+      rpcErr.code === "PGRST202" ||
+      rpcErr.message?.includes("schema cache")
+    ) {
+      const customErr = new Error("SQL_SETUP_REQUIRED");
+      (customErr as any).code = "SQL_SETUP_REQUIRED";
+      throw customErr;
+    }
+    throw new Error(deleteErr.message || "Failed to assign campaigns");
+  }
+
   if (workspaceIds.length > 0) {
     const rows = workspaceIds.map((wsId) => ({ user_id: userId, workspace_id: wsId }));
     const { error: insertErr } = await (supabase as any).from("designer_workspaces").insert(rows);
-    if (insertErr) throw insertErr;
+    if (insertErr) {
+      if (
+        insertErr.code === "PGRST205" ||
+        insertErr.message?.includes("schema cache") ||
+        insertErr.message?.includes("designer_workspaces")
+      ) {
+        const customErr = new Error("SQL_SETUP_REQUIRED");
+        (customErr as any).code = "SQL_SETUP_REQUIRED";
+        throw customErr;
+      }
+      throw new Error(insertErr.message || "Failed to assign campaigns");
+    }
   }
 }
 
