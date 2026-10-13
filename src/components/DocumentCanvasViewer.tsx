@@ -9,10 +9,17 @@ import {
   Maximize2,
   Minimize2,
   RotateCcw,
+  RotateCw,
   ShieldAlert,
   Loader2,
   Eye,
   Sparkles,
+  LayoutGrid,
+  X,
+  SlidersHorizontal,
+  Expand,
+  FoldHorizontal,
+  Smartphone,
 } from "lucide-react";
 
 // Configure pdf.js worker to match the installed version
@@ -50,13 +57,14 @@ export function DocumentCanvasViewer({
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(1);
 
+  // Rotation State (0, 90, 180, 270 degrees)
+  const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(0);
+
   // Responsive Layout State
-  // Unscaled native dimensions of the current slide / page
   const [nativeDimensions, setNativeDimensions] = useState<{ width: number; height: number }>({
     width: 1920,
     height: 1080,
   });
-  // Measured container dimensions available for the slide
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
     width: 900,
     height: 600,
@@ -67,8 +75,16 @@ export function DocumentCanvasViewer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [devToolsDetected, setDevToolsDetected] = useState(false);
 
-  // Touch Swipe tracking
+  // Mobile Slide Selector Sheet State
+  const [showSlideSheet, setShowSlideSheet] = useState(false);
+  const [dismissedLandscapeTip, setDismissedLandscapeTip] = useState(false);
+
+  // Touch Gesture Refs (Pinch, Double Tap, Pan)
   const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const pinchStartDistRef = useRef<number | null>(null);
+  const pinchStartZoomRef = useRef<number>(1.0);
+  const lastTapTimeRef = useRef<number>(0);
 
   // 1. Determine file type
   useEffect(() => {
@@ -94,7 +110,9 @@ export function DocumentCanvasViewer({
       const rect = wrapper.getBoundingClientRect();
       const w = Math.floor(rect.width);
       // In fullscreen, utilize available height minus padding; inline use measured height
-      const h = Math.floor(rect.height || (isFullscreen ? window.innerHeight - 130 : Math.min(window.innerHeight * 0.72, 680)));
+      const h = Math.floor(
+        rect.height || (isFullscreen ? window.innerHeight - 80 : Math.min(window.innerHeight * 0.72, 680))
+      );
       if (w > 0 && h > 0) {
         setContainerSize({ width: w, height: h });
       }
@@ -108,16 +126,28 @@ export function DocumentCanvasViewer({
 
     resizeObserver.observe(wrapper);
     window.addEventListener("resize", updateSize);
+    window.addEventListener("orientationchange", updateSize);
 
     return () => {
       resizeObserver.disconnect();
       window.removeEventListener("resize", updateSize);
+      window.removeEventListener("orientationchange", updateSize);
     };
   }, [isFullscreen]);
 
   // 3. DevTools protection for public client preview
   useEffect(() => {
     if (!isPublicClientView) return;
+
+    // Do not block localhost / local testing environments
+    if (
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        window.location.hostname.endsWith(".local"))
+    ) {
+      return;
+    }
 
     try {
       DisableDevtool({
@@ -178,17 +208,54 @@ export function DocumentCanvasViewer({
     }
   }, [numPages]);
 
-  // Fullscreen Toggle
-  const toggleFullscreen = useCallback(() => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-    }
+  // Rotate Clockwise (0° -> 90° -> 180° -> 270° -> 0°)
+  const handleRotateClockwise = useCallback(() => {
+    setRotation((prev) => (((prev + 90) % 360) as 0 | 90 | 180 | 270));
   }, []);
 
-  // 5. Keyboard Navigation (Arrow Keys, Fullscreen F, PageUp/PageDown, Space)
+  // Reset Rotation to 0
+  const handleResetRotation = useCallback(() => {
+    setRotation(0);
+  }, []);
+
+  // Fullscreen Toggle (with optional mobile orientation lock)
+  const toggleFullscreen = useCallback(() => {
+    if (!containerRef.current) return;
+    if (!isFullscreen) {
+      if (containerRef.current.requestFullscreen) {
+        containerRef.current
+          .requestFullscreen()
+          .then(() => {
+            setIsFullscreen(true);
+            try {
+              if ((screen as any)?.orientation?.lock) {
+                (screen as any).orientation.lock("landscape").catch(() => {});
+              }
+            } catch {}
+          })
+          .catch(() => setIsFullscreen(true)); // Fallback to CSS fullscreen
+      } else {
+        setIsFullscreen(true);
+      }
+    } else {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen()
+          .then(() => {
+            setIsFullscreen(false);
+            try {
+              if ((screen as any)?.orientation?.unlock) {
+                (screen as any).orientation.unlock();
+              }
+            } catch {}
+          })
+          .catch(() => setIsFullscreen(false));
+      } else {
+        setIsFullscreen(false);
+      }
+    }
+  }, [isFullscreen]);
+
+  // 5. Keyboard Navigation (Arrow keys, Space, R for rotate, F for fullscreen)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement as HTMLElement | null;
@@ -221,6 +288,11 @@ export function DocumentCanvasViewer({
           e.preventDefault();
           toggleFullscreen();
         }
+      } else if (e.key === "r" || e.key === "R") {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          handleRotateClockwise();
+        }
       } else if (e.key === "0" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         setZoomLevel(1.0);
@@ -229,13 +301,12 @@ export function DocumentCanvasViewer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [numPages, goToNextPage, goToPrevPage, toggleFullscreen]);
+  }, [numPages, goToNextPage, goToPrevPage, toggleFullscreen, handleRotateClockwise]);
 
   // 6. Fullscreen Change Event Sync
   useEffect(() => {
     const handleFsChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
-      // Reset zoom to auto-fit on fullscreen toggle for crisp presentation view
       setZoomLevel(1.0);
     };
     document.addEventListener("fullscreenchange", handleFsChange);
@@ -263,17 +334,17 @@ export function DocumentCanvasViewer({
     const text1 = "PREVIEW ONLY • CREWVIA BNI";
     const text2 = leadName ? `PREPARED FOR ${leadName.toUpperCase()}` : "CONFIDENTIAL CLIENT DRAFT";
 
-    ctx.font = "600 13px system-ui, -apple-system, sans-serif";
-    ctx.fillStyle = "rgba(100, 116, 139, 0.13)";
+    ctx.font = "600 12px system-ui, -apple-system, sans-serif";
+    ctx.fillStyle = "rgba(100, 116, 139, 0.12)";
     ctx.textAlign = "center";
 
-    const stepX = 280;
-    const stepY = 150;
+    const stepX = 260;
+    const stepY = 140;
 
     for (let x = -displayW * 1.5; x < displayW * 2.5; x += stepX) {
       for (let y = -displayH * 1.5; y < displayH * 2.5; y += stepY) {
         ctx.fillText(text1, x, y);
-        ctx.fillText(text2, x, y + 18);
+        ctx.fillText(text2, x, y + 16);
       }
     }
     ctx.restore();
@@ -313,30 +384,33 @@ export function DocumentCanvasViewer({
     };
   }, [fileUrl, fileType]);
 
-  // 9. Production-Grade Canvas Rendering (Aspect-Ratio Preserved Auto-Fit)
+  // 9. Production-Grade Canvas Rendering (Aspect-Ratio Preserved Auto-Fit with Rotation)
   useEffect(() => {
     if (devToolsDetected) return;
 
     let isCancelled = false;
 
-    // Helper: Calculate Auto-Fit Dimensions (Contain scale)
-    const computeFit = (nativeW: number, nativeH: number) => {
-      // Safe padding so the document breathes inside container
-      const horizontalPadding = isFullscreen ? 32 : 24;
-      const verticalPadding = isFullscreen ? 32 : 20;
+    // Helper: Calculate Auto-Fit Dimensions (Contain scale with rotation accounted)
+    const computeFit = (nativeW: number, nativeH: number, currentRotation: number) => {
+      // If rotated 90° or 270°, swap effective native width and height
+      const isRotated90or270 = currentRotation === 90 || currentRotation === 270;
+      const effectiveNativeW = isRotated90or270 ? nativeH : nativeW;
+      const effectiveNativeH = isRotated90or270 ? nativeW : nativeH;
 
-      const availW = Math.max(containerSize.width - horizontalPadding, 260);
-      const availH = Math.max(containerSize.height - verticalPadding, 240);
+      const horizontalPadding = isFullscreen ? 16 : 12;
+      const verticalPadding = isFullscreen ? 16 : 12;
 
-      const scaleX = availW / nativeW;
-      const scaleY = availH / nativeH;
-      // "contain" scale: slide fills as much space as possible without stretching or cropping
+      const availW = Math.max(containerSize.width - horizontalPadding, 220);
+      const availH = Math.max(containerSize.height - verticalPadding, 200);
+
+      const scaleX = availW / effectiveNativeW;
+      const scaleY = availH / effectiveNativeH;
       const baseFitScale = Math.min(scaleX, scaleY);
 
-      const displayW = Math.round(nativeW * baseFitScale * zoomLevel);
-      const displayH = Math.round(nativeH * baseFitScale * zoomLevel);
+      const displayW = Math.round(effectiveNativeW * baseFitScale * zoomLevel);
+      const displayH = Math.round(effectiveNativeH * baseFitScale * zoomLevel);
 
-      return { baseFitScale, displayW, displayH };
+      return { baseFitScale, displayW, displayH, effectiveNativeW, effectiveNativeH };
     };
 
     if (fileType === "pdf" && pdfDoc) {
@@ -359,8 +433,8 @@ export function DocumentCanvasViewer({
         const nativeH = unscaledViewport.height;
         setNativeDimensions({ width: nativeW, height: nativeH });
 
-        // 2. Compute exact fit with current zoom
-        const { baseFitScale, displayW, displayH } = computeFit(nativeW, nativeH);
+        // 2. Compute exact fit with current zoom & rotation
+        const { baseFitScale, displayW, displayH } = computeFit(nativeW, nativeH, rotation);
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -368,7 +442,10 @@ export function DocumentCanvasViewer({
         // 3. Sharp rendering using devicePixelRatio
         const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
         const renderScale = baseFitScale * zoomLevel * dpr;
-        const renderViewport = page.getViewport({ scale: renderScale });
+
+        // PDF.js native rotation support
+        const pdfRotation = (page.rotate + rotation) % 360;
+        const renderViewport = page.getViewport({ scale: renderScale, rotation: pdfRotation });
 
         canvas.width = Math.floor(renderViewport.width);
         canvas.height = Math.floor(renderViewport.height);
@@ -398,7 +475,6 @@ export function DocumentCanvasViewer({
             }
           })
           .catch((err: any) => {
-            // Ignore cancelled render tasks
             if (err?.name !== "RenderingCancelledException") {
               console.error("Render task error:", err);
             }
@@ -415,14 +491,16 @@ export function DocumentCanvasViewer({
         const nativeH = img.naturalHeight || 1080;
         setNativeDimensions({ width: nativeW, height: nativeH });
 
-        const { displayW, displayH } = computeFit(nativeW, nativeH);
+        const { displayW, displayH } = computeFit(nativeW, nativeH, rotation);
 
         const canvas = canvasRef.current;
         if (!canvas) return;
 
         const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-        canvas.width = Math.floor(displayW * dpr);
-        canvas.height = Math.floor(displayH * dpr);
+        const canvasW = Math.floor(displayW * dpr);
+        const canvasH = Math.floor(displayH * dpr);
+        canvas.width = canvasW;
+        canvas.height = canvasH;
         canvas.style.width = `${displayW}px`;
         canvas.style.height = `${displayH}px`;
 
@@ -430,7 +508,19 @@ export function DocumentCanvasViewer({
         if (ctx) {
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = "high";
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          const isRotated90or270 = rotation === 90 || rotation === 270;
+          ctx.save();
+          ctx.translate(canvasW / 2, canvasH / 2);
+          ctx.rotate((rotation * Math.PI) / 180);
+
+          if (isRotated90or270) {
+            ctx.drawImage(img, -canvasH / 2, -canvasW / 2, canvasH, canvasW);
+          } else {
+            ctx.drawImage(img, -canvasW / 2, -canvasH / 2, canvasW, canvasH);
+          }
+          ctx.restore();
+
           drawWatermark(displayW, displayH, dpr);
         }
         setLoading(false);
@@ -457,6 +547,7 @@ export function DocumentCanvasViewer({
     pdfDoc,
     currentPage,
     zoomLevel,
+    rotation,
     containerSize,
     fileUrl,
     drawWatermark,
@@ -464,20 +555,55 @@ export function DocumentCanvasViewer({
     isFullscreen,
   ]);
 
-  // Touch Swipe Handlers for mobile review
+  // 10. Advanced Mobile Touch Gestures (Pinch-to-Zoom, Double-Tap, Swipe)
   const handleTouchStart = (e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    if (touch) {
-      touchStartX.current = touch.clientX;
+    if (e.touches.length === 2) {
+      // 2 fingers: Pinch to zoom
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      pinchStartDistRef.current = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      pinchStartZoomRef.current = zoomLevel;
+      touchStartX.current = null;
+    } else if (e.touches.length === 1) {
+      // 1 finger: record start for swipe or double tap
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchStartDistRef.current) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const factor = dist / pinchStartDistRef.current;
+      const targetZoom = Math.min(3.5, Math.max(0.6, +(pinchStartZoomRef.current * factor).toFixed(2)));
+      setZoomLevel(targetZoom);
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const touch = e.changedTouches[0];
-    if (touch) {
-      const deltaX = touch.clientX - touchStartX.current;
-      if (Math.abs(deltaX) > 45) {
+    if (e.touches.length < 2) {
+      pinchStartDistRef.current = null;
+    }
+
+    const now = Date.now();
+    // Double tap toggle: zoom to 2.0x or reset to 1.0x
+    if (e.changedTouches.length === 1 && now - lastTapTimeRef.current < 320) {
+      e.preventDefault();
+      setZoomLevel((prev) => (prev > 1.2 ? 1.0 : 2.0));
+      lastTapTimeRef.current = 0;
+      touchStartX.current = null;
+      return;
+    }
+    lastTapTimeRef.current = now;
+
+    // Single finger swipe between slides (only when not zoomed in)
+    if (zoomLevel <= 1.15 && touchStartX.current !== null && e.changedTouches[0]) {
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const deltaY = touchStartY.current !== null ? Math.abs(e.changedTouches[0].clientY - touchStartY.current) : 0;
+      // Ensure horizontal swipe is dominant (not vertical page scroll)
+      if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > deltaY) {
         if (deltaX < 0) {
           goToNextPage();
         } else {
@@ -486,12 +612,13 @@ export function DocumentCanvasViewer({
       }
     }
     touchStartX.current = null;
+    touchStartY.current = null;
   };
 
-  // 10. Inspection Blocked Screen
+  // 11. Inspection Blocked Screen
   if (devToolsDetected) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[500px] p-8 text-center bg-background rounded-2xl border border-destructive/30">
+      <div className="flex flex-col items-center justify-center min-h-[460px] p-8 text-center bg-background rounded-2xl border border-destructive/30">
         <ShieldAlert className="size-16 text-destructive mb-4 animate-bounce" />
         <h2 className="text-xl font-bold text-foreground">Inspection Blocked</h2>
         <p className="mt-2 text-sm text-muted-foreground max-w-md">
@@ -503,13 +630,19 @@ export function DocumentCanvasViewer({
 
   const zoomPercent = Math.round(zoomLevel * 100);
 
+  const isWidescreenInPortrait =
+    !dismissedLandscapeTip &&
+    rotation === 0 &&
+    containerSize.width < 560 &&
+    nativeDimensions.width / (nativeDimensions.height || 1) > 1.25;
+
   return (
     <div
       ref={containerRef}
       className={`relative flex flex-col items-center w-full select-none transition-all duration-200 ${
         isFullscreen
           ? "fixed inset-0 z-50 bg-neutral-950 p-2 sm:p-4 h-screen w-screen overflow-hidden"
-          : "bg-neutral-900/90 rounded-2xl p-2.5 sm:p-4 shadow-2xl border border-border/40"
+          : "bg-neutral-900/90 rounded-2xl p-2 sm:p-4 shadow-2xl border border-border/40"
       }`}
       style={{
         WebkitTouchCallout: "none",
@@ -519,17 +652,44 @@ export function DocumentCanvasViewer({
       onContextMenu={(e) => isPublicClientView && e.preventDefault()}
       onDragStart={(e) => e.preventDefault()}
     >
-      {/* Top Floating Controls Toolbar */}
-      <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 w-full max-w-4xl px-3 sm:px-4 py-2 mb-3 bg-neutral-900/85 backdrop-blur-xl rounded-xl border border-neutral-800 shadow-xl">
+      {/* Mobile Landscape Recommendation Banner */}
+      {isWidescreenInPortrait && (
+        <div className="w-full max-w-4xl mb-2.5 px-3 py-2 rounded-xl bg-accent/15 border border-accent/30 text-accent flex items-center justify-between gap-2 shadow-lg animate-in fade-in slide-in-from-top-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <Smartphone className="size-4 shrink-0 rotate-90 text-accent" />
+            <span className="text-[11px] sm:text-xs font-medium text-neutral-100 truncate">
+              Turn phone sideways for widescreen presentation view, or tap to rotate.
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={handleRotateClockwise}
+              className="px-2.5 py-1 rounded-lg bg-accent text-accent-foreground text-[10px] font-bold hover:brightness-110 active:scale-95 transition-all shadow"
+            >
+              Rotate 90°
+            </button>
+            <button
+              onClick={() => setDismissedLandscapeTip(true)}
+              className="p-1 rounded text-neutral-400 hover:text-white transition-colors"
+              aria-label="Dismiss banner"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop / Tablet Top Controls Toolbar */}
+      <div className="sticky top-0 z-30 hidden sm:flex items-center justify-between gap-2 w-full max-w-4xl px-3 sm:px-4 py-2 mb-3 bg-neutral-900/85 backdrop-blur-xl rounded-xl border border-neutral-800 shadow-xl">
         {/* Left: Document Info */}
-        <div className="flex items-center gap-2 text-xs font-semibold text-neutral-200 truncate max-w-[160px] sm:max-w-xs">
+        <div className="flex items-center gap-2 text-xs font-semibold text-neutral-200 truncate max-w-xs">
           <Eye className="size-3.5 text-accent shrink-0" />
           <span className="truncate">{title || (leadName ? `${leadName}'s Review` : "Presentation Review")}</span>
         </div>
 
-        {/* Center: Interactive Slide Pagination */}
+        {/* Center: Slide Pagination */}
         {fileType === "pdf" && numPages > 1 ? (
-          <div className="flex items-center gap-1 sm:gap-1.5 bg-neutral-800/90 rounded-lg px-2 py-1 text-xs font-semibold shadow-inner border border-neutral-700/60">
+          <div className="flex items-center gap-1.5 bg-neutral-800/90 rounded-lg px-2 py-1 text-xs font-semibold shadow-inner border border-neutral-700/60">
             <button
               onClick={goToPrevPage}
               disabled={currentPage <= 1}
@@ -538,9 +698,18 @@ export function DocumentCanvasViewer({
             >
               <ChevronLeft className="size-4" />
             </button>
-            <span className="px-1 text-white font-mono text-[11px] sm:text-xs tracking-tight">
-              {currentPage} <span className="text-neutral-500 font-normal">/</span> {numPages}
-            </span>
+
+            <button
+              onClick={() => setShowSlideSheet(true)}
+              className="px-1 text-white font-mono text-xs tracking-tight hover:text-accent transition-colors flex items-center gap-1"
+              title="Click to view all slides"
+            >
+              <span>{currentPage}</span>
+              <span className="text-neutral-500 font-normal">/</span>
+              <span>{numPages}</span>
+              <LayoutGrid className="size-3 text-neutral-400 ml-0.5" />
+            </button>
+
             <button
               onClick={goToNextPage}
               disabled={currentPage >= numPages}
@@ -549,19 +718,44 @@ export function DocumentCanvasViewer({
             >
               <ChevronRight className="size-4" />
             </button>
-            <span className="hidden md:inline-block ml-1 text-[10px] text-neutral-400 font-normal border-l border-neutral-700 pl-2">
-              Keys: <kbd className="px-1 py-0.5 rounded bg-neutral-950 font-mono text-neutral-300">←</kbd> <kbd className="px-1 py-0.5 rounded bg-neutral-950 font-mono text-neutral-300">→</kbd>
-            </span>
           </div>
         ) : (
-          <div className="hidden sm:flex items-center gap-1 text-[11px] text-neutral-400">
+          <div className="flex items-center gap-1 text-[11px] text-neutral-400">
             <Sparkles className="size-3 text-accent" />
             <span>Responsive Auto-Fit Active</span>
           </div>
         )}
 
-        {/* Right: Zoom & Fullscreen Controls */}
+        {/* Right: Rotate, Zoom & Fullscreen Controls */}
         <div className="flex items-center gap-1">
+          {/* Rotate 90° Clockwise */}
+          <button
+            onClick={handleRotateClockwise}
+            className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+              rotation !== 0
+                ? "bg-accent/20 text-accent border border-accent/30 font-semibold"
+                : "text-neutral-400 hover:text-white hover:bg-neutral-800"
+            }`}
+            title={`Rotate 90° Clockwise (R key) • Currently: ${rotation}°`}
+          >
+            <RotateCw className="size-4" />
+            {rotation !== 0 && <span className="text-[10px] font-mono">{rotation}°</span>}
+          </button>
+
+          {/* Reset Rotation if rotated */}
+          {rotation !== 0 && (
+            <button
+              onClick={handleResetRotation}
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              title="Reset rotation to 0°"
+            >
+              <RotateCcw className="size-3.5" />
+            </button>
+          )}
+
+          <div className="h-4 w-[1px] bg-neutral-800 mx-0.5" />
+
+          {/* Zoom Out */}
           <button
             onClick={() => setZoomLevel((z) => Math.max(0.6, +(z - 0.15).toFixed(2)))}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
@@ -570,6 +764,7 @@ export function DocumentCanvasViewer({
             <ZoomOut className="size-4" />
           </button>
 
+          {/* Zoom Level Reset */}
           <button
             onClick={() => setZoomLevel(1.0)}
             className="px-1.5 py-0.5 rounded text-[11px] font-mono text-neutral-300 hover:text-accent hover:bg-neutral-800/80 transition-colors min-w-[42px] text-center"
@@ -578,6 +773,7 @@ export function DocumentCanvasViewer({
             {zoomPercent === 100 ? "Fit" : `${zoomPercent}%`}
           </button>
 
+          {/* Zoom In */}
           <button
             onClick={() => setZoomLevel((z) => Math.min(2.5, +(z + 0.15).toFixed(2)))}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
@@ -586,16 +782,9 @@ export function DocumentCanvasViewer({
             <ZoomIn className="size-4" />
           </button>
 
-          <button
-            onClick={() => setZoomLevel(1.0)}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-            title="Fit to Screen"
-          >
-            <RotateCcw className="size-3.5" />
-          </button>
-
           <div className="h-4 w-[1px] bg-neutral-800 mx-0.5" />
 
+          {/* Fullscreen Toggle */}
           <button
             onClick={toggleFullscreen}
             className={`p-1.5 rounded-lg transition-all ${
@@ -614,17 +803,22 @@ export function DocumentCanvasViewer({
       <div
         ref={viewportWrapperRef}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         className={`relative flex items-center justify-center w-full overflow-auto transition-all ${
           isFullscreen
             ? "flex-1 min-h-0 w-full"
-            : "min-h-[380px] sm:min-h-[480px] max-h-[78vh] h-[64vh] sm:h-[72vh]"
+            : "min-h-[280px] sm:min-h-[440px] max-h-[76vh] h-[58vh] sm:h-[72vh]"
         }`}
+        style={{
+          touchAction: zoomLevel > 1.05 ? "pan-x pan-y" : "pan-y",
+          overscrollBehavior: "contain",
+        }}
       >
         {/* Loading Spinner */}
         {loading && (
           <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-neutral-950/60 backdrop-blur-sm rounded-xl">
-            <Loader2 className="size-9 text-accent animate-spin mb-2" />
+            <Loader2 className="size-8 sm:size-9 text-accent animate-spin mb-2" />
             <span className="text-xs text-white/90 font-medium tracking-tight">
               Rendering slide {currentPage}...
             </span>
@@ -633,21 +827,20 @@ export function DocumentCanvasViewer({
 
         {/* Error Fallback */}
         {error ? (
-          <div className="p-8 text-center text-rose-300 text-sm max-w-md bg-rose-950/40 rounded-xl border border-rose-800/40">
+          <div className="p-6 text-center text-rose-300 text-xs sm:text-sm max-w-md bg-rose-950/40 rounded-xl border border-rose-800/40">
             {error}
           </div>
         ) : (
-          <div className="relative flex items-center justify-center my-auto transition-transform duration-100 ease-out">
+          <div className="relative transition-transform duration-100 ease-out m-auto flex items-center justify-center shrink-0">
             {/* Slide Frame with Layered Protection */}
             <div
               className="relative rounded-lg shadow-2xl overflow-hidden border border-white/10 bg-white"
               style={{
-                // Enforce exact display dimensions to prevent any CSS stretching or distortion
                 maxWidth: "none",
                 maxHeight: "none",
               }}
             >
-              {/* Main Pure HTML5 Canvas Layer (Decoded pixels only, NO <img> or <iframe>) */}
+              {/* Main Pure HTML5 Canvas Layer */}
               <canvas
                 ref={canvasRef}
                 className="block pointer-events-none"
@@ -683,24 +876,24 @@ export function DocumentCanvasViewer({
               />
             </div>
 
-            {/* Floating Left Arrow (Previous Slide) */}
+            {/* Desktop Floating Left Arrow (Previous Slide) */}
             {fileType === "pdf" && numPages > 1 && currentPage > 1 && (
               <button
                 type="button"
                 onClick={goToPrevPage}
-                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 size-9 sm:size-11 rounded-full bg-neutral-900/80 hover:bg-neutral-800 backdrop-blur-md border border-white/20 text-white flex items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95"
+                className="hidden sm:flex absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 size-9 sm:size-11 rounded-full bg-neutral-900/80 hover:bg-neutral-800 backdrop-blur-md border border-white/20 text-white items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95"
                 title="Previous slide (← Left Arrow)"
               >
                 <ChevronLeft className="size-5 sm:size-6" />
               </button>
             )}
 
-            {/* Floating Right Arrow (Next Slide) */}
+            {/* Desktop Floating Right Arrow (Next Slide) */}
             {fileType === "pdf" && numPages > 1 && currentPage < numPages && (
               <button
                 type="button"
                 onClick={goToNextPage}
-                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 size-9 sm:size-11 rounded-full bg-neutral-900/80 hover:bg-neutral-800 backdrop-blur-md border border-white/20 text-white flex items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95"
+                className="hidden sm:flex absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 size-9 sm:size-11 rounded-full bg-neutral-900/80 hover:bg-neutral-800 backdrop-blur-md border border-white/20 text-white items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95"
                 title="Next slide (→ Right Arrow)"
               >
                 <ChevronRight className="size-5 sm:size-6" />
@@ -710,21 +903,211 @@ export function DocumentCanvasViewer({
         )}
       </div>
 
-      {/* Bottom Confidentiality Footer & Keyboard Help */}
-      <div className="mt-2.5 flex flex-wrap items-center justify-between w-full max-w-4xl text-[11px] text-neutral-400 px-2 gap-2">
-        <span className="flex items-center gap-1.5">
-          <span className="size-1.5 rounded-full bg-emerald-500" />
-          <span>Protected Sandbox • Download & Extraction Disabled</span>
-        </span>
-        <div className="flex items-center gap-3">
-          {numPages > 1 && (
-            <span className="hidden sm:inline text-neutral-500">
-              Navigate: <kbd className="px-1 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono text-[10px]">←</kbd> <kbd className="px-1 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono text-[10px]">→</kbd> keys
-            </span>
+      {/* Slide Progress Bar for Mobile Multi-Page Presentations */}
+      {fileType === "pdf" && numPages > 1 && (
+        <div className="flex sm:hidden w-full px-2 mt-2 items-center gap-2">
+          <div className="flex-1 bg-neutral-800 h-1 rounded-full overflow-hidden">
+            <div
+              className="bg-accent h-full transition-all duration-300 rounded-full"
+              style={{ width: `${(currentPage / numPages) * 100}%` }}
+            />
+          </div>
+          <span className="text-[10px] font-mono text-neutral-400 shrink-0">
+            {currentPage}/{numPages}
+          </span>
+        </div>
+      )}
+
+      {/* Mobile Floating Action & Navigation Bar (Thumb-Friendly Controls) */}
+      <div className="flex sm:hidden items-center justify-between gap-1 w-full mt-2 px-2 py-1.5 bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl">
+        {/* Left: Slide Navigation (if multi-page) */}
+        {fileType === "pdf" && numPages > 1 ? (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={goToPrevPage}
+              disabled={currentPage <= 1}
+              className="h-10 w-10 rounded-xl bg-neutral-800/90 active:bg-neutral-700 text-white flex items-center justify-center disabled:opacity-20 active:scale-95 transition-all"
+              aria-label="Previous Slide"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+
+            {/* Slide Pill: Tapping opens thumbnail drawer */}
+            <button
+              onClick={() => setShowSlideSheet(true)}
+              className="px-2.5 h-10 rounded-xl bg-neutral-800/90 active:bg-neutral-700 text-white text-xs font-semibold flex items-center gap-1.5 border border-white/5 active:scale-95 transition-all"
+              title="Tap to browse all slides"
+            >
+              <span className="font-mono">{currentPage}/{numPages}</span>
+              <LayoutGrid className="size-3.5 text-accent" />
+            </button>
+
+            <button
+              onClick={goToNextPage}
+              disabled={currentPage >= numPages}
+              className="h-10 w-10 rounded-xl bg-neutral-800/90 active:bg-neutral-700 text-white flex items-center justify-center disabled:opacity-20 active:scale-95 transition-all"
+              aria-label="Next Slide"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-neutral-200 font-semibold px-2">
+            <Eye className="size-4 text-accent" />
+            <span>Mobile View</span>
+          </div>
+        )}
+
+        {/* Right: Rotate, Zoom Cycle, Fullscreen */}
+        <div className="flex items-center gap-1">
+          {/* Rotate 90° Clockwise Button */}
+          <button
+            onClick={handleRotateClockwise}
+            className={`h-10 min-w-10 px-2 rounded-xl flex items-center justify-center gap-1 transition-all active:scale-95 ${
+              rotation !== 0
+                ? "bg-accent text-accent-foreground font-bold shadow-md shadow-accent/25"
+                : "bg-neutral-800/90 active:bg-neutral-700 text-neutral-200"
+            }`}
+            title={`Rotate 90° (Current: ${rotation}°)`}
+            aria-label="Rotate presentation slide"
+          >
+            <RotateCw className="size-4" />
+            {rotation !== 0 && <span className="text-[10px] font-mono font-bold">{rotation}°</span>}
+          </button>
+
+          {/* Reset rotation if rotated */}
+          {rotation !== 0 && (
+            <button
+              onClick={handleResetRotation}
+              className="h-10 w-9 rounded-xl bg-neutral-800/90 active:bg-neutral-700 text-neutral-300 flex items-center justify-center active:scale-95 transition-all"
+              title="Reset rotation to 0°"
+              aria-label="Reset rotation to 0"
+            >
+              <RotateCcw className="size-3.5" />
+            </button>
           )}
-          {companyName && <span className="font-medium text-neutral-300">{companyName}</span>}
+
+          {/* Tap to Cycle Zoom */}
+          <button
+            onClick={() => {
+              setZoomLevel((prev) => (prev < 1.3 ? 1.6 : prev < 2.0 ? 2.2 : 1.0));
+            }}
+            className="px-2.5 h-10 rounded-xl bg-neutral-800/90 active:bg-neutral-700 text-neutral-200 text-xs font-mono font-semibold flex items-center justify-center active:scale-95 transition-all"
+            title="Tap to cycle zoom"
+          >
+            {zoomLevel > 1.8 ? "220%" : zoomLevel > 1.2 ? "160%" : "Fit"}
+          </button>
+
+          {/* Fullscreen / Expand Mode */}
+          <button
+            onClick={toggleFullscreen}
+            className={`h-10 w-10 rounded-xl flex items-center justify-center transition-all active:scale-95 ${
+              isFullscreen
+                ? "bg-accent text-accent-foreground shadow-md"
+                : "bg-neutral-800/90 active:bg-neutral-700 text-neutral-200"
+            }`}
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen presentation"}
+            aria-label="Toggle Fullscreen"
+          >
+            {isFullscreen ? <Minimize2 className="size-4.5" /> : <Maximize2 className="size-4.5" />}
+          </button>
         </div>
       </div>
+
+      {/* Bottom Confidentiality Footer & Gestures Hint */}
+      <div className="mt-2.5 flex flex-wrap items-center justify-between w-full max-w-4xl text-[10px] sm:text-[11px] text-neutral-400 px-2 gap-1.5">
+        <span className="flex items-center gap-1.5">
+          <span className="size-1.5 rounded-full bg-emerald-500" />
+          <span>Protected Sandbox • Swipe / Double-Tap / Pinch to Zoom</span>
+        </span>
+        <div className="flex items-center gap-2">
+          {rotation !== 0 && (
+            <span className="text-accent font-semibold flex items-center gap-1">
+              <RotateCw className="size-3" />
+              <span>Rotated {rotation}°</span>
+            </span>
+          )}
+          {companyName && <span className="font-medium text-neutral-300 truncate max-w-[150px]">{companyName}</span>}
+        </div>
+      </div>
+
+      {/* Slide Thumbnails & Quick Scrubber Bottom Sheet Modal */}
+      {showSlideSheet && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => setShowSlideSheet(false)}
+        >
+          <div
+            className="w-full sm:max-w-md bg-neutral-900 border border-neutral-800 rounded-t-2xl sm:rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Sheet Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
+              <div className="flex items-center gap-2">
+                <LayoutGrid className="size-4 text-accent" />
+                <h3 className="text-sm font-bold text-white">Jump to Slide</h3>
+                <span className="text-[11px] text-neutral-400 font-mono">({numPages} slides)</span>
+              </div>
+              <button
+                onClick={() => setShowSlideSheet(false)}
+                className="size-7 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white flex items-center justify-center transition-colors"
+                aria-label="Close slide sheet"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Quick Slider Scrubber */}
+            <div className="space-y-1.5 px-1">
+              <div className="flex items-center justify-between text-xs text-neutral-400">
+                <span>Slide Scrubber</span>
+                <span className="font-mono text-white font-bold">{currentPage} of {numPages}</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max={numPages}
+                value={currentPage}
+                onChange={(e) => setCurrentPage(Number(e.target.value))}
+                className="w-full accent-accent cursor-pointer h-2 bg-neutral-800 rounded-lg appearance-none"
+              />
+            </div>
+
+            {/* Slide Grid Buttons */}
+            <div className="flex-1 overflow-y-auto max-h-56 grid grid-cols-4 sm:grid-cols-5 gap-2 pr-1">
+              {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => {
+                const isActive = pageNum === currentPage;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => {
+                      setCurrentPage(pageNum);
+                      setShowSlideSheet(false);
+                    }}
+                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl text-xs font-semibold transition-all border ${
+                      isActive
+                        ? "bg-accent text-accent-foreground border-accent shadow-md shadow-accent/25 scale-105"
+                        : "bg-neutral-800/80 hover:bg-neutral-700 text-neutral-200 border-neutral-700/60"
+                    }`}
+                  >
+                    <span className="text-[10px] uppercase tracking-wider text-neutral-400">Slide</span>
+                    <span className="text-base font-bold font-mono mt-0.5">{pageNum}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 text-center">
+              <button
+                onClick={() => setShowSlideSheet(false)}
+                className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

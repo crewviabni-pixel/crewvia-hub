@@ -162,7 +162,7 @@ function PublicPreviewScreen() {
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 flex flex-col items-center">
+        <main className="flex-1 max-w-5xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-8 flex flex-col items-center pb-24 sm:pb-8">
           {isQueryLoading ? (
             <div className="flex flex-col items-center justify-center min-h-[500px] w-full bg-neutral-900/40 rounded-2xl border border-neutral-800 p-8">
               <div className="size-10 border-2 border-accent border-t-transparent rounded-full animate-spin mb-4" />
@@ -219,9 +219,9 @@ function PublicPreviewScreen() {
               </a>
             </div>
           ) : (
-            <div className="w-full flex flex-col gap-6">
+            <div className="w-full flex flex-col gap-3 sm:gap-6">
               {/* Title & Metadata Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-neutral-900/50 p-4 sm:p-5 rounded-2xl border border-neutral-800/80">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-neutral-900/50 p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-neutral-800/80">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-semibold text-accent uppercase tracking-wider">
@@ -259,7 +259,7 @@ function PublicPreviewScreen() {
               />
 
               {/* Bottom Actions for Client */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-neutral-900 via-neutral-900/90 to-neutral-900/60 border border-neutral-800">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-neutral-900 via-neutral-900/90 to-neutral-900/60 border border-neutral-800 mb-8 sm:mb-0">
                 <div>
                   <h4 className="text-sm font-semibold text-white flex items-center gap-1.5">
                     <Sparkles className="size-4 text-accent" />
