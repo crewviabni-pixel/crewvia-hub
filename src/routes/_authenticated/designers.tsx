@@ -170,7 +170,7 @@ BEGIN
   )
   ON CONFLICT DO NOTHING;
 
-  -- Insert into public.user_roles
+  -- Insert into public.user_roles (with ON CONFLICT to gracefully handle any auth.users trigger)
   INSERT INTO public.user_roles (
     user_id,
     role,
@@ -183,7 +183,11 @@ BEGIN
     v_clean_username,
     false,
     now()
-  );
+  )
+  ON CONFLICT (user_id) DO UPDATE SET
+    role = 'designer',
+    username = EXCLUDED.username,
+    is_suspended = false;
 
   RETURN jsonb_build_object(
     'success', true,
