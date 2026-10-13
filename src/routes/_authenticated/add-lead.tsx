@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -11,6 +11,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 export const Route = createFileRoute("/_authenticated/add-lead")({
+  beforeLoad: ({ context }: any) => {
+    if (context?.appRole !== 'admin') {
+      throw redirect({ to: "/work" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Add Lead — Crewvia BNI CRM" },

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { format, isToday, differenceInCalendarDays, isPast } from "date-fns";
@@ -25,6 +25,11 @@ import {
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/_authenticated/reminders")({
+  beforeLoad: ({ context }: any) => {
+    if (context?.appRole !== 'admin') {
+      throw redirect({ to: "/work" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Reminders & Daily Activity — Crewvia BNI CRM" },

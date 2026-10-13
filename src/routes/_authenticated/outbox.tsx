@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, Image as ImageIcon, X, Trash2, Save, ExternalLink } from "lucide-react";
@@ -14,6 +14,11 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { matchIntelligentSearch } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/outbox")({
+  beforeLoad: ({ context }: any) => {
+    if (context?.appRole !== 'admin') {
+      throw redirect({ to: "/work" });
+    }
+  },
   component: OutboxScreen,
 });
 

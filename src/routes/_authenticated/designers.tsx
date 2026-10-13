@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { 
@@ -22,39 +22,94 @@ import {
   ExternalLink,
   Loader2,
   Database,
-  Terminal
+  Terminal,
+  Layers
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
 import { AppShell } from "@/components/AppShell";
-import { fetchDesigners, createDesigner, resetDesignerPassword, deleteDesigner, toggleDesignerSuspension } from "@/lib/work-api";
+import { 
+  fetchDesigners, 
+  createDesigner, 
+  resetDesignerPassword, 
+  deleteDesigner, 
+  toggleDesignerSuspension,
+  fetchAllDesignerWorkspacesMapping,
+  assignDesignerWorkspaces
+} from "@/lib/work-api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/_authenticated/designers")({
+  beforeLoad: ({ context }: any) => {
+    if (context?.appRole !== 'admin') {
+      throw redirect({ to: "/work" });
+    }
+  },
   component: DesignersScreen,
 });
 
 const SUPABASE_PROJECT_SQL_URL = "https://supabase.com/dashboard/project/mawmjqeyjzktxbtsswgw/sql/new";
 
 const SQL_MIGRATION_TEXT = `-- ==============================================================================
--- CREWVIA BNI CRM: PRODUCTION DESIGNER USER PROVISIONING & MANAGEMENT RPC
+-- CREWVIA BNI CRM: PRODUCTION DESIGNER USER PROVISIONING & RBAC RPC (WITH CAMPAIGN ASSIGNMENT)
 -- ==============================================================================
--- Run this in your Supabase SQL Editor once to enable unlimited 1-click designer creation.
+-- Enables extensions schema in search_path, references extensions.crypt/gen_salt,
+-- handles user_roles upsert safely, and implements campaign (workspace) isolation.
+-- Run this in your Supabase SQL Editor once.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
--- 1. admin_create_designer
+-- 1. Designer Workspaces Junction Table
+CREATE TABLE IF NOT EXISTS public.designer_workspaces (
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  workspace_id UUID REFERENCES public.workspaces(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (user_id, workspace_id)
+);
+
+ALTER TABLE public.designer_workspaces ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admins have full access to designer_workspaces" ON public.designer_workspaces;
+CREATE POLICY "Admins have full access to designer_workspaces" ON public.designer_workspaces
+FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin')
+)
+WITH CHECK (
+  EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin')
+);
+
+DROP POLICY IF EXISTS "Designers can read own assigned workspaces" ON public.designer_workspaces;
+CREATE POLICY "Designers can read own assigned workspaces" ON public.designer_workspaces
+FOR SELECT TO authenticated
+USING (user_id = auth.uid());
+
+-- Update workspaces RLS so designers can only read assigned workspaces
+DROP POLICY IF EXISTS "Designers can read workspaces" ON public.workspaces;
+DROP POLICY IF EXISTS "Designers can read assigned workspaces" ON public.workspaces;
+CREATE POLICY "Designers can read assigned workspaces" ON public.workspaces
+FOR SELECT TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.designer_workspaces dw
+    WHERE dw.workspace_id = public.workspaces.id AND dw.user_id = auth.uid()
+  )
+);
+
+-- 2. admin_create_designer (supports optional initial workspace assignment)
 CREATE OR REPLACE FUNCTION public.admin_create_designer(
   p_username TEXT,
   p_password TEXT,
-  p_name TEXT DEFAULT ''
+  p_name TEXT DEFAULT '',
+  p_workspace_ids UUID[] DEFAULT ARRAY[]::UUID[]
 )
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, auth, extensions
-AS $$
+AS $
 DECLARE
   v_caller_id UUID;
   v_new_user_id UUID;
@@ -62,10 +117,11 @@ DECLARE
   v_clean_username TEXT;
   v_clean_name TEXT;
   v_hashed_pw TEXT;
+  v_ws_id UUID;
 BEGIN
   v_caller_id := auth.uid();
 
-  -- Verify that the caller is an active admin
+  -- Verify caller is admin
   IF NOT EXISTS (
     SELECT 1 FROM public.user_roles 
     WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
@@ -98,6 +154,18 @@ BEGIN
 
   v_email := v_clean_username || '@crewviabni.com';
 
+  -- Clean up any orphaned user in auth.users that has no role in public.user_roles
+  DELETE FROM auth.identities 
+  WHERE user_id IN (
+    SELECT id FROM auth.users 
+    WHERE lower(email) = lower(v_email) 
+      AND id NOT IN (SELECT user_id FROM public.user_roles)
+  );
+
+  DELETE FROM auth.users 
+  WHERE lower(email) = lower(v_email) 
+    AND id NOT IN (SELECT user_id FROM public.user_roles);
+
   -- Check if email already exists in auth.users
   IF EXISTS (
     SELECT 1 FROM auth.users 
@@ -109,7 +177,7 @@ BEGIN
   v_new_user_id := gen_random_uuid();
   v_hashed_pw := extensions.crypt(p_password, extensions.gen_salt('bf'));
 
-  -- Insert directly into auth.users with pre-confirmed email (zero email verification needed)
+  -- Insert directly into auth.users with pre-confirmed email
   INSERT INTO auth.users (
     instance_id,
     id,
@@ -148,7 +216,7 @@ BEGIN
     ''
   );
 
-  -- Insert identity into auth.identities for standard email+password sign in
+  -- Insert identity into auth.identities
   INSERT INTO auth.identities (
     id,
     user_id,
@@ -163,14 +231,14 @@ BEGIN
     v_new_user_id,
     jsonb_build_object('sub', v_new_user_id::text, 'email', v_email),
     'email',
-    v_email,
+    v_new_user_id::text,
     now(),
     now(),
     now()
   )
   ON CONFLICT DO NOTHING;
 
-  -- Insert into public.user_roles (with ON CONFLICT to gracefully handle any auth.users trigger)
+  -- Insert into public.user_roles (safely handles any auth.users trigger that may auto-insert)
   INSERT INTO public.user_roles (
     user_id,
     role,
@@ -189,6 +257,18 @@ BEGIN
     username = EXCLUDED.username,
     is_suspended = false;
 
+  -- Assign workspaces if provided
+  IF p_workspace_ids IS NOT NULL AND array_length(p_workspace_ids, 1) > 0 THEN
+    FOREACH v_ws_id IN ARRAY p_workspace_ids
+    LOOP
+      IF v_ws_id IS NOT NULL THEN
+        INSERT INTO public.designer_workspaces (user_id, workspace_id)
+        VALUES (v_new_user_id, v_ws_id)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END LOOP;
+  END IF;
+
   RETURN jsonb_build_object(
     'success', true,
     'user_id', v_new_user_id,
@@ -197,9 +277,52 @@ BEGIN
     'email', v_email
   );
 END;
-$$;
+$;
 
--- 2. admin_reset_designer_password
+-- 3. admin_assign_designer_workspaces
+CREATE OR REPLACE FUNCTION public.admin_assign_designer_workspaces(
+  p_user_id UUID,
+  p_workspace_ids UUID[]
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $
+DECLARE
+  v_caller_id UUID;
+  v_ws_id UUID;
+BEGIN
+  v_caller_id := auth.uid();
+
+  -- Verify caller is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.user_roles 
+    WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: Only administrators can assign campaigns.';
+  END IF;
+
+  -- Delete existing assignments for this user
+  DELETE FROM public.designer_workspaces WHERE user_id = p_user_id;
+
+  -- Insert new assignments
+  IF p_workspace_ids IS NOT NULL THEN
+    FOREACH v_ws_id IN ARRAY p_workspace_ids
+    LOOP
+      IF v_ws_id IS NOT NULL THEN
+        INSERT INTO public.designer_workspaces (user_id, workspace_id)
+        VALUES (p_user_id, v_ws_id)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END LOOP;
+  END IF;
+
+  RETURN jsonb_build_object('success', true, 'user_id', p_user_id, 'assigned_count', coalesce(array_length(p_workspace_ids, 1), 0));
+END;
+$;
+
+-- 4. admin_reset_designer_password
 CREATE OR REPLACE FUNCTION public.admin_reset_designer_password(
   p_user_id UUID,
   p_new_password TEXT
@@ -208,14 +331,14 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, auth, extensions
-AS $$
+AS $
 DECLARE
   v_caller_id UUID;
   v_hashed_pw TEXT;
 BEGIN
   v_caller_id := auth.uid();
 
-  -- Verify that caller is admin
+  -- Verify caller is admin
   IF NOT EXISTS (
     SELECT 1 FROM public.user_roles 
     WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
@@ -229,7 +352,6 @@ BEGIN
 
   v_hashed_pw := extensions.crypt(p_new_password, extensions.gen_salt('bf'));
 
-  -- Update encrypted password in auth.users
   UPDATE auth.users
   SET encrypted_password = v_hashed_pw,
       updated_at = now()
@@ -237,9 +359,9 @@ BEGIN
 
   RETURN jsonb_build_object('success', true, 'user_id', p_user_id);
 END;
-$$;
+$;
 
--- 3. admin_delete_designer
+-- 5. admin_delete_designer
 CREATE OR REPLACE FUNCTION public.admin_delete_designer(
   p_user_id UUID
 )
@@ -247,7 +369,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, auth, extensions
-AS $$
+AS $
 DECLARE
   v_caller_id UUID;
 BEGIN
@@ -269,21 +391,20 @@ BEGIN
     RAISE EXCEPTION 'Cannot delete an administrator account.';
   END IF;
 
-  -- Delete from auth.users (this cascades or we also delete from user_roles)
+  DELETE FROM public.designer_workspaces WHERE user_id = p_user_id;
   DELETE FROM auth.identities WHERE user_id = p_user_id;
   DELETE FROM public.user_roles WHERE user_id = p_user_id;
   DELETE FROM auth.users WHERE id = p_user_id;
 
   RETURN jsonb_build_object('success', true, 'user_id', p_user_id);
 END;
-$$;
+$;
 
-GRANT EXECUTE ON FUNCTION public.admin_create_designer(TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_create_designer(TEXT, TEXT, TEXT, UUID[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_assign_designer_workspaces(UUID, UUID[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_reset_designer_password(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_delete_designer(UUID) TO authenticated;
-
--- Force PostgREST schema cache reload immediately
-NOTIFY pgrst, 'reload schema';`;
+`;
 
 function generateRandomPassword(length = 10) {
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%";
@@ -307,6 +428,17 @@ function DesignersScreen() {
 
   const [resetTarget, setResetTarget] = useState<{ userId: string; username: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ userId: string; username: string } | null>(null);
+  const { workspaces } = useWorkspace();
+  const [manageCampaignsTarget, setManageCampaignsTarget] = useState<{
+    userId: string;
+    username: string;
+    currentWorkspaceIds: string[];
+  } | null>(null);
+
+  const { data: designerWorkspacesMapping = {}, refetch: refetchMappings } = useQuery({
+    queryKey: ["designer-workspaces-mapping"],
+    queryFn: fetchAllDesignerWorkspacesMapping,
+  });
 
   const { data: designers = [], isLoading } = useQuery({
     queryKey: ["designers"],
@@ -416,6 +548,7 @@ function DesignersScreen() {
               <tr>
                 <th className="px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Designer</th>
                 <th className="px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Username</th>
+                <th className="px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Assigned Campaigns</th>
                 <th className="px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Created</th>
                 <th className="px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider text-right">Actions</th>
@@ -424,7 +557,7 @@ function DesignersScreen() {
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="size-4 animate-spin text-accent" />
                       <span>Loading designers...</span>
@@ -433,7 +566,7 @@ function DesignersScreen() {
                 </tr>
               ) : filteredDesigners.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
                     <div className="max-w-xs mx-auto space-y-2">
                       <Users className="size-8 mx-auto text-muted-foreground/50" />
                       <p className="font-medium text-foreground">No designers found</p>
@@ -470,6 +603,33 @@ function DesignersScreen() {
                         </span>
                       </td>
 
+                      {/* Assigned Campaigns */}
+                      <td className="px-4 py-3.5">
+                        {(() => {
+                          const assignedIds = designerWorkspacesMapping[d.user_id] || [];
+                          const assignedWs = workspaces.filter((w: any) => assignedIds.includes(w.id));
+                          if (assignedWs.length === 0) {
+                            return (
+                              <span className="text-xs text-muted-foreground italic">
+                                None (No campaigns)
+                              </span>
+                            );
+                          }
+                          return (
+                            <div className="flex flex-wrap gap-1 max-w-[220px]">
+                              {assignedWs.map((ws: any) => (
+                                <span
+                                  key={ws.id}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-accent/15 text-accent border border-accent/25"
+                                >
+                                  {ws.name}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </td>
+
                       {/* Created Date */}
                       <td className="px-4 py-3.5 text-xs text-muted-foreground">
                         {d.created_at ? format(new Date(d.created_at), "d MMM yyyy") : "—"}
@@ -491,6 +651,24 @@ function DesignersScreen() {
                       {/* Action Buttons */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {/* Campaigns Assignment */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const assignedIds = designerWorkspacesMapping[d.user_id] || [];
+                              setManageCampaignsTarget({
+                                userId: d.user_id,
+                                username: d.username,
+                                currentWorkspaceIds: assignedIds,
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
+                            title="Assign campaigns to this designer"
+                          >
+                            <Layers className="size-3" />
+                            <span>Campaigns</span>
+                          </button>
+
                           {/* Reset Password */}
                           <button
                             type="button"
@@ -590,6 +768,19 @@ function DesignersScreen() {
           onClose={() => setDeleteTarget(null)}
         />
       )}
+
+      {/* Manage Campaigns Dialog */}
+      {manageCampaignsTarget && (
+        <ManageDesignerCampaignsDialog
+          target={manageCampaignsTarget}
+          workspaces={workspaces}
+          onClose={() => setManageCampaignsTarget(null)}
+          onUpdated={() => {
+            refetchMappings();
+            queryClient.invalidateQueries({ queryKey: ["designer-workspaces-mapping"] });
+          }}
+        />
+      )}
     </AppShell>
   );
 }
@@ -609,10 +800,12 @@ function AddDesignerDialog({
   onSuccess: (creds: { username: string; name: string; password: string }) => void;
 }) {
   const queryClient = useQueryClient();
+  const { workspaces } = useWorkspace();
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<string[]>([]);
 
   const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, "");
 
@@ -620,11 +813,12 @@ function AddDesignerDialog({
     mutationFn: async () => {
       if (!cleanUsername) throw new Error("Please enter a username");
       if (password.length < 6) throw new Error("Password must be at least 6 characters");
-      return await createDesigner(cleanUsername, password, name.trim());
+      return await createDesigner(cleanUsername, password, name.trim(), selectedWorkspaceIds);
     },
     onSuccess: () => {
       toast.success(`Designer account "${cleanUsername}" created successfully!`);
       queryClient.invalidateQueries({ queryKey: ["designers"] });
+      queryClient.invalidateQueries({ queryKey: ["designer-workspaces-mapping"] });
       onSuccess({
         username: cleanUsername,
         name: name.trim() || cleanUsername,
@@ -634,6 +828,7 @@ function AddDesignerDialog({
       setUsername("");
       setName("");
       setPassword("");
+      setSelectedWorkspaceIds([]);
     },
     onError: (err: any) => {
       if (err.message === "SQL_SETUP_REQUIRED" || err.code === "SQL_SETUP_REQUIRED") {
@@ -733,6 +928,62 @@ function AddDesignerDialog({
                 {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
             </div>
+          </div>
+
+          {/* Campaign Assignment */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Assign Campaigns
+              </label>
+              {workspaces.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedWorkspaceIds.length === workspaces.length) {
+                      setSelectedWorkspaceIds([]);
+                    } else {
+                      setSelectedWorkspaceIds(workspaces.map((w: any) => w.id));
+                    }
+                  }}
+                  className="text-[11px] font-semibold text-accent hover:underline"
+                >
+                  {selectedWorkspaceIds.length === workspaces.length ? "Deselect All" : "Select All"}
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              The designer will ONLY see and access campaigns selected here.
+            </p>
+            {workspaces.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No campaigns found.</p>
+            ) : (
+              <div className="space-y-1 max-h-36 overflow-y-auto rounded-lg border border-input bg-background/50 p-2">
+                {workspaces.map((ws: any) => {
+                  const isChecked = selectedWorkspaceIds.includes(ws.id);
+                  return (
+                    <label
+                      key={ws.id}
+                      className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer hover:bg-secondary/60 p-1.5 rounded transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedWorkspaceIds((prev) => [...prev, ws.id]);
+                          } else {
+                            setSelectedWorkspaceIds((prev) => prev.filter((id) => id !== ws.id));
+                          }
+                        }}
+                        className="rounded border-input text-accent focus:ring-accent"
+                      />
+                      <span>{ws.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="pt-2">
@@ -1130,6 +1381,129 @@ function DeleteDesignerDialog({
           >
             {deleteMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
             <span>{deleteMutation.isPending ? "Deleting..." : "Delete Account"}</span>
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+// ------------------------------------------------------------------------------
+// Manage Designer Campaigns Dialog
+// ------------------------------------------------------------------------------
+function ManageDesignerCampaignsDialog({
+  target,
+  workspaces,
+  onClose,
+  onUpdated,
+}: {
+  target: { userId: string; username: string; currentWorkspaceIds: string[] };
+  workspaces: any[];
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const [selectedIds, setSelectedIds] = useState<string[]>(target.currentWorkspaceIds);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      await assignDesignerWorkspaces(target.userId, selectedIds);
+    },
+    onSuccess: () => {
+      toast.success(`Campaigns updated for "${target.username}"!`);
+      onUpdated();
+      onClose();
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update assigned campaigns");
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base font-bold">
+            <Layers className="size-5 text-accent" />
+            Manage Campaigns for "{target.username}"
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Select campaigns this designer has permission to access. In their account, only these campaigns will appear in the top campaign dropdown.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="py-2 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Campaigns ({selectedIds.length} of {workspaces.length} assigned)
+            </span>
+            {workspaces.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedIds.length === workspaces.length) {
+                    setSelectedIds([]);
+                  } else {
+                    setSelectedIds(workspaces.map((w: any) => w.id));
+                  }
+                }}
+                className="text-[11px] font-semibold text-accent hover:underline"
+              >
+                {selectedIds.length === workspaces.length ? "Deselect All" : "Select All"}
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-1.5 max-h-56 overflow-y-auto rounded-lg border border-input bg-background/50 p-2.5">
+            {workspaces.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No campaigns found.</p>
+            ) : (
+              workspaces.map((ws: any) => {
+                const isChecked = selectedIds.includes(ws.id);
+                return (
+                  <label
+                    key={ws.id}
+                    className="flex items-center gap-2.5 text-xs font-medium text-foreground cursor-pointer hover:bg-secondary/60 p-2 rounded-md transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds((prev) => [...prev, ws.id]);
+                        } else {
+                          setSelectedIds((prev) => prev.filter((id) => id !== ws.id));
+                        }
+                      }}
+                      className="size-4 rounded border-input text-accent focus:ring-accent"
+                    />
+                    <div className="flex-1">
+                      <p className="font-semibold">{ws.name}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono">{ws.id}</p>
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+            className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-accent-foreground hover:bg-accent/90 transition-all shadow-sm disabled:opacity-50"
+          >
+            {saveMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+            <span>{saveMutation.isPending ? "Saving..." : "Save Assignments"}</span>
           </button>
         </DialogFooter>
       </DialogContent>

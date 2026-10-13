@@ -21,6 +21,7 @@ interface DocumentPreviewModalProps {
       company?: string | null;
     } | null;
   } | null;
+  canManageLinks?: boolean;
   onOpenWhatsApp?: (workItem: any) => void;
   onWorkItemUpdated?: (updated: any) => void;
 }
@@ -29,6 +30,7 @@ export function DocumentPreviewModal({
   open,
   onOpenChange,
   workItem,
+  canManageLinks = true,
   onOpenWhatsApp,
   onWorkItemUpdated,
 }: DocumentPreviewModalProps) {
@@ -110,14 +112,16 @@ export function DocumentPreviewModal({
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-accent/20 text-accent uppercase">
                 {typeLabel}
               </span>
-              {isExpired ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-500/20 text-red-500 border border-red-500/30">
-                  <ShieldAlert className="size-3" /> Link Expired
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                  <ShieldCheck className="size-3" /> Link Active
-                </span>
+              {canManageLinks && (
+                isExpired ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-500/20 text-red-500 border border-red-500/30">
+                    <ShieldAlert className="size-3" /> Link Expired
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    <ShieldCheck className="size-3" /> Link Active
+                  </span>
+                )
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -125,70 +129,72 @@ export function DocumentPreviewModal({
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap pr-6">
-            {/* Expire / Revoke Link */}
-            {!isExpired ? (
-              <button
-                type="button"
-                onClick={handleExpireLink}
-                disabled={isProcessing}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
-                title="Immediately expire this preview link so client cannot view it"
-              >
-                {isProcessing ? <Loader2 className="size-3 animate-spin" /> : <Ban className="size-3" />}
-                <span>Expire Link</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleRegenerateLink}
-                disabled={isProcessing}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-accent text-accent-foreground hover:bg-accent/90 transition-all shadow-sm disabled:opacity-50"
-                title="Generate a brand new link and reactivate access"
-              >
-                {isProcessing ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
-                <span>Regenerate Link</span>
-              </button>
-            )}
+          {canManageLinks && (
+            <div className="flex items-center gap-2 flex-wrap pr-6">
+              {/* Expire / Revoke Link */}
+              {!isExpired ? (
+                <button
+                  type="button"
+                  onClick={handleExpireLink}
+                  disabled={isProcessing}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                  title="Immediately expire this preview link so client cannot view it"
+                >
+                  {isProcessing ? <Loader2 className="size-3 animate-spin" /> : <Ban className="size-3" />}
+                  <span>Expire Link</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleRegenerateLink}
+                  disabled={isProcessing}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-accent text-accent-foreground hover:bg-accent/90 transition-all shadow-sm disabled:opacity-50"
+                  title="Generate a brand new link and reactivate access"
+                >
+                  {isProcessing ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+                  <span>Regenerate Link</span>
+                </button>
+              )}
 
-            {/* Regenerate fresh token button even if active */}
-            {!isExpired && (
-              <button
-                type="button"
-                onClick={handleRegenerateLink}
-                disabled={isProcessing}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-border bg-secondary/80 hover:bg-secondary text-foreground transition-all disabled:opacity-50"
-                title="Invalidate old link and create a fresh new URL"
-              >
-                <RefreshCw className="size-3" />
-                <span className="hidden sm:inline">Regenerate</span>
-              </button>
-            )}
+              {/* Regenerate fresh token button even if active */}
+              {!isExpired && (
+                <button
+                  type="button"
+                  onClick={handleRegenerateLink}
+                  disabled={isProcessing}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-border bg-secondary/80 hover:bg-secondary text-foreground transition-all disabled:opacity-50"
+                  title="Invalidate old link and create a fresh new URL"
+                >
+                  <RefreshCw className="size-3" />
+                  <span className="hidden sm:inline">Regenerate</span>
+                </button>
+              )}
 
-            {/* Copy Link */}
-            <button
-              onClick={handleCopyLink}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground transition-all shadow-sm"
-              title="Copy Client Preview Link to share"
-            >
-              {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-              <span>{copied ? "Copied" : "Copy Link"}</span>
-            </button>
-
-            {onOpenWhatsApp && (
+              {/* Copy Link */}
               <button
-                onClick={() => {
-                  onOpenChange(false);
-                  onOpenWhatsApp(currentWorkItem);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm"
-                title="Send Preview via WhatsApp"
+                onClick={handleCopyLink}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground transition-all shadow-sm"
+                title="Copy Client Preview Link to share"
               >
-                <MessageCircle className="size-3.5" />
-                <span className="hidden sm:inline">WhatsApp</span>
+                {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                <span>{copied ? "Copied" : "Copy Link"}</span>
               </button>
-            )}
-          </div>
+
+              {onOpenWhatsApp && (
+                <button
+                  onClick={() => {
+                    onOpenChange(false);
+                    onOpenWhatsApp(currentWorkItem);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm"
+                  title="Send Preview via WhatsApp"
+                >
+                  <MessageCircle className="size-3.5" />
+                  <span className="hidden sm:inline">WhatsApp</span>
+                </button>
+              )}
+            </div>
+          )}
         </DialogHeader>
 
         <div className="pt-3">

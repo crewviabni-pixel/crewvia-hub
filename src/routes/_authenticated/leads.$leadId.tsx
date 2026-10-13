@@ -1,5 +1,5 @@
 import { Zap } from "lucide-react";
-import { createFileRoute, Link, useParams, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useParams, useNavigate, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -70,6 +70,11 @@ import {
 } from "@/lib/crm-api";
 
 export const Route = createFileRoute("/_authenticated/leads/$leadId")({
+  beforeLoad: ({ context }: any) => {
+    if (context?.appRole !== 'admin') {
+      throw redirect({ to: "/work" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Lead details — Crewvia BNI CRM" },

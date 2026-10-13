@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchMessageTemplates, saveMessageTemplate, deleteMessageTemplate } from "@/lib/crm-api";
@@ -9,6 +9,11 @@ import { Pencil, Trash2, Plus, ArrowRight } from "lucide-react";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/_authenticated/templates")({
+  beforeLoad: ({ context }: any) => {
+    if (context?.appRole !== 'admin') {
+      throw redirect({ to: "/work" });
+    }
+  },
   head: () => ({
     meta: [{ title: "Message Templates — Crewvia BNI CRM" }],
   }),

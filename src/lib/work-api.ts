@@ -34,11 +34,17 @@ export async function fetchDesigners() {
   return data;
 }
 
-export async function createDesigner(username: string, password: string, name?: string) {
+export async function createDesigner(
+  username: string, 
+  password: string, 
+  name?: string,
+  workspaceIds: string[] = []
+) {
   const { data, error } = await (supabase as any).rpc("admin_create_designer", {
     p_username: username.trim(),
     p_password: password,
     p_name: name?.trim() || "",
+    p_workspace_ids: workspaceIds,
   });
 
   if (error) {
@@ -54,7 +60,64 @@ export async function createDesigner(username: string, password: string, name?: 
     throw new Error(error.message || "Failed to create designer");
   }
 
+  // Fallback: If RPC ran without workspace parameter or designer_workspaces table exists
+  if (workspaceIds.length > 0 && data?.user_id) {
+    try {
+      await assignDesignerWorkspaces(data.user_id, workspaceIds);
+    } catch (e) {
+      console.warn("Direct assignment fallback notice:", e);
+    }
+  }
+
   return data;
+}
+
+export async function fetchDesignerWorkspaces(userId: string): Promise<string[]> {
+  const { data, error } = await (supabase as any)
+    .from("designer_workspaces")
+    .select("workspace_id")
+    .eq("user_id", userId);
+  
+  if (error) {
+    console.warn("fetchDesignerWorkspaces error:", error.message);
+    return [];
+  }
+  return (data || []).map((r: any) => r.workspace_id);
+}
+
+export async function fetchAllDesignerWorkspacesMapping(): Promise<Record<string, string[]>> {
+  const { data, error } = await (supabase as any)
+    .from("designer_workspaces")
+    .select("user_id, workspace_id");
+  
+  if (error) {
+    console.warn("fetchAllDesignerWorkspacesMapping error:", error.message);
+    return {};
+  }
+  const mapping: Record<string, string[]> = {};
+  (data || []).forEach((row: any) => {
+    if (!mapping[row.user_id]) mapping[row.user_id] = [];
+    mapping[row.user_id].push(row.workspace_id);
+  });
+  return mapping;
+}
+
+export async function assignDesignerWorkspaces(userId: string, workspaceIds: string[]): Promise<void> {
+  // Try RPC first
+  const { error: rpcErr } = await (supabase as any).rpc("admin_assign_designer_workspaces", {
+    p_user_id: userId,
+    p_workspace_ids: workspaceIds,
+  });
+
+  if (!rpcErr) return;
+
+  // Fallback: direct table operations if RPC not yet run in SQL editor
+  await (supabase as any).from("designer_workspaces").delete().eq("user_id", userId);
+  if (workspaceIds.length > 0) {
+    const rows = workspaceIds.map((wsId) => ({ user_id: userId, workspace_id: wsId }));
+    const { error: insertErr } = await (supabase as any).from("designer_workspaces").insert(rows);
+    if (insertErr) throw insertErr;
+  }
 }
 
 export async function resetDesignerPassword(userId: string, newPassword: string) {

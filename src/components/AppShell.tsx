@@ -130,15 +130,17 @@ export function AppShell({
             <div className="hidden sm:block min-w-[130px] max-w-[190px]">
               <Select value={activeWorkspaceId || ""} onValueChange={handleWorkspaceChange}>
                 <SelectTrigger className="h-8.5 rounded-lg border border-border/80 bg-background/60 hover:bg-secondary/60 px-2.5 font-display font-medium text-xs shadow-none focus:ring-1 focus:ring-ring transition-colors">
-                  <SelectValue placeholder="Select Campaign" />
+                  <SelectValue placeholder={workspaces.length === 0 ? "No Campaigns" : "Select Campaign"} />
                 </SelectTrigger>
                 <SelectContent>
                   {workspaces.map((ws) => (
                     <SelectItem key={ws.id} value={ws.id} className="text-xs">{ws.name}</SelectItem>
                   ))}
-                  <SelectItem value="new" className="text-primary font-medium border-t mt-1 pt-1 rounded-none text-xs">
-                    + Create Campaign
-                  </SelectItem>
+                  {appRole === 'admin' && (
+                    <SelectItem value="new" className="text-primary font-medium border-t mt-1 pt-1 rounded-none text-xs">
+                      + Create Campaign
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -174,8 +176,8 @@ export function AppShell({
 
             <div className="h-5 w-px bg-border/80 mx-0.5 hidden sm:block shrink-0" />
 
-            {/* WhatsApp Bridge Status Badge */}
-            <WhatsAppBridgeStatus />
+            {/* WhatsApp Bridge Status Badge (Admin Only) */}
+            {appRole === 'admin' && <WhatsAppBridgeStatus />}
 
             {/* Outbox / Inbox */}
             {appRole === 'admin' && (
@@ -194,7 +196,7 @@ export function AppShell({
             )}
 
             {/* Settings Dialog */}
-            <SettingsDialog />
+            <SettingsDialog appRole={appRole} />
 
             {/* Sign Out */}
             <button
@@ -262,7 +264,7 @@ export function AppShell({
   );
 }
 
-function SettingsDialog() {
+function SettingsDialog({ appRole = "admin" }: { appRole?: string }) {
   const { activeWorkspaceId } = useWorkspace();
   const queryClient = useQueryClient();
   const [pushEnabled, setPushEnabled] = useState(
@@ -416,7 +418,7 @@ function SettingsDialog() {
     <Dialog>
       <DialogTrigger asChild>
         <button
-          title="Settings & Lead Import"
+          title={appRole === 'designer' ? "Notification Preferences" : "Settings & Lead Import"}
           className="inline-flex size-8.5 items-center justify-center rounded-lg border border-border/80 bg-background/60 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors shrink-0"
         >
           <Settings className="size-4" />
@@ -424,7 +426,9 @@ function SettingsDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="font-display">Settings</DialogTitle>
+          <DialogTitle className="font-display">
+            {appRole === 'designer' ? "Preferences" : "Settings"}
+          </DialogTitle>
         </DialogHeader>
         <div className="py-4 space-y-4">
           <div className="flex items-center justify-between rounded-lg border border-border p-4 shadow-sm">
@@ -439,48 +443,52 @@ function SettingsDialog() {
             />
           </div>
           
-          <div className="rounded-lg border border-border p-4 shadow-sm space-y-3">
-            <div className="space-y-0.5">
-              <label className="text-sm font-medium">Default Product Price</label>
-              <p className="text-xs text-muted-foreground">Used as the default Deal Value for new leads</p>
-            </div>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-              <input
-                type="number"
-                value={defaultPrice}
-                onChange={handlePriceChange}
-                className="w-full rounded-md border border-input bg-background py-2 pl-7 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="10000"
-              />
-            </div>
-          </div>
+          {appRole === 'admin' && (
+            <>
+              <div className="rounded-lg border border-border p-4 shadow-sm space-y-3">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-medium">Default Product Price</label>
+                  <p className="text-xs text-muted-foreground">Used as the default Deal Value for new leads</p>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
+                  <input
+                    type="number"
+                    value={defaultPrice}
+                    onChange={handlePriceChange}
+                    className="w-full rounded-md border border-input bg-background py-2 pl-7 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="10000"
+                  />
+                </div>
+              </div>
 
-          <div className="rounded-lg border border-border p-4 shadow-sm space-y-3">
-            <div className="space-y-0.5">
-              <label className="text-sm font-medium">Import Leads</label>
-              <p className="text-xs text-muted-foreground">Upload a CSV file to add leads to the current workspace. Requires columns: Name, UserNumber.</p>
-            </div>
-            <div>
-              <label
-                className={cn(
-                  "flex w-full cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-secondary transition-colors",
-                  isImporting ? "opacity-50 cursor-not-allowed" : ""
-                )}
-              >
-                {isImporting ? "Importing..." : "Upload CSV"}
-                <input
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                  disabled={isImporting}
-                />
-              </label>
-            </div>
-          </div>
-          
-          <CustomFieldsSettings />
+              <div className="rounded-lg border border-border p-4 shadow-sm space-y-3">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-medium">Import Leads</label>
+                  <p className="text-xs text-muted-foreground">Upload a CSV file to add leads to the current workspace. Requires columns: Name, UserNumber.</p>
+                </div>
+                <div>
+                  <label
+                    className={cn(
+                      "flex w-full cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-secondary transition-colors",
+                      isImporting ? "opacity-50 cursor-not-allowed" : ""
+                    )}
+                  >
+                    {isImporting ? "Importing..." : "Upload CSV"}
+                    <input
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                      disabled={isImporting}
+                    />
+                  </label>
+                </div>
+              </div>
+              
+              <CustomFieldsSettings />
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

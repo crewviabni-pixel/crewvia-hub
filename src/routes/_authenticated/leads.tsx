@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, useMatches } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useMatches, redirect } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Plus, Search, Trash2, LayoutList, Columns3 } from "lucide-react";
@@ -15,6 +15,11 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { matchIntelligentSearch } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/leads")({
+  beforeLoad: ({ context }: any) => {
+    if (context?.appRole !== 'admin') {
+      throw redirect({ to: "/work" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Leads — Crewvia BNI CRM" },

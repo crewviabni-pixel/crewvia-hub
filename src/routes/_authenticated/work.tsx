@@ -218,13 +218,19 @@ function WorkCard({ item, appRole }: { item: any, appRole: string }) {
           <p className="text-xs text-muted-foreground line-clamp-2">{item.lead.info_text || "No information provided."}</p>
           {item.status === "completed" && item.file_url && (
             <div className="flex items-center gap-1.5 text-[11px] font-semibold">
-              {item.preview_enabled === false ? (
-                <span className="text-red-600 dark:text-red-400 flex items-center gap-1">
-                  <Ban className="size-3" /> Link Expired
-                </span>
+              {appRole === 'admin' ? (
+                item.preview_enabled === false ? (
+                  <span className="text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <Ban className="size-3" /> Link Expired
+                  </span>
+                ) : (
+                  <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <Eye className="size-3" /> Preview Ready
+                  </span>
+                )
               ) : (
                 <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <Eye className="size-3" /> Preview Ready
+                  <Eye className="size-3" /> Work Uploaded
                 </span>
               )}
             </div>
@@ -344,16 +350,18 @@ function WorkCard({ item, appRole }: { item: any, appRole: string }) {
             <div className="pt-4 border-t border-border space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Client Preview Access
+                  {appRole === 'admin' ? "Client Preview Access" : "Uploaded Work"}
                 </span>
-                {item.preview_enabled === false ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
-                    <Ban className="size-2.5" /> Revoked / Expired
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                    <ShieldCheck className="size-2.5" /> Link Active
-                  </span>
+                {appRole === 'admin' && (
+                  item.preview_enabled === false ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
+                      <Ban className="size-2.5" /> Revoked / Expired
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      <ShieldCheck className="size-2.5" /> Link Active
+                    </span>
+                  )
                 )}
               </div>
 
@@ -366,95 +374,99 @@ function WorkCard({ item, appRole }: { item: any, appRole: string }) {
                 Preview in Software (No Download)
               </button>
 
-              <div className="grid grid-cols-2 gap-2">
-                {/* Expire / Revoke */}
-                {item.preview_enabled !== false ? (
-                  <button
-                    type="button"
-                    disabled={isProcessingLink}
-                    onClick={async () => {
-                      try {
-                        setIsProcessingLink(true);
-                        await expireWorkPreview(item.id);
-                        await queryClient.invalidateQueries({ queryKey: ["workItems"] });
-                        toast.warning(`Preview link for ${item.type} revoked & expired!`);
-                      } catch (err: any) {
-                        toast.error(err.message || "Failed to expire link");
-                      } finally {
-                        setIsProcessingLink(false);
-                      }
-                    }}
-                    className="flex items-center justify-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                  >
-                    {isProcessingLink ? <Loader2 className="size-3 animate-spin" /> : <Ban className="size-3" />}
-                    Expire Link
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={isProcessingLink}
-                    onClick={async () => {
-                      try {
-                        setIsProcessingLink(true);
-                        const res = await regenerateWorkPreview(item.id);
-                        await queryClient.invalidateQueries({ queryKey: ["workItems"] });
-                        const newUrl = createPreviewShareUrl({ ...item, preview_token: res.preview_token, preview_enabled: true }, { preferLiveDomain: true });
-                        navigator.clipboard.writeText(newUrl);
-                        toast.success("New preview link generated & copied to clipboard!");
-                      } catch (err: any) {
-                        toast.error(err.message || "Failed to regenerate link");
-                      } finally {
-                        setIsProcessingLink(false);
-                      }
-                    }}
-                    className="flex items-center justify-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-3 py-2 text-xs font-semibold hover:bg-accent/90 transition-colors disabled:opacity-50"
-                  >
-                    {isProcessingLink ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
-                    Regenerate Link
-                  </button>
+              <div className={appRole === 'admin' ? "grid grid-cols-2 gap-2" : "flex flex-col gap-2"}>
+                {/* Expire / Revoke (Admin Only) */}
+                {appRole === 'admin' && (
+                  <>
+                    {item.preview_enabled !== false ? (
+                      <button
+                        type="button"
+                        disabled={isProcessingLink}
+                        onClick={async () => {
+                          try {
+                            setIsProcessingLink(true);
+                            await expireWorkPreview(item.id);
+                            await queryClient.invalidateQueries({ queryKey: ["workItems"] });
+                            toast.warning(`Preview link for ${item.type} revoked & expired!`);
+                          } catch (err: any) {
+                            toast.error(err.message || "Failed to expire link");
+                          } finally {
+                            setIsProcessingLink(false);
+                          }
+                        }}
+                        className="flex items-center justify-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                      >
+                        {isProcessingLink ? <Loader2 className="size-3 animate-spin" /> : <Ban className="size-3" />}
+                        Expire Link
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isProcessingLink}
+                        onClick={async () => {
+                          try {
+                            setIsProcessingLink(true);
+                            const res = await regenerateWorkPreview(item.id);
+                            await queryClient.invalidateQueries({ queryKey: ["workItems"] });
+                            const newUrl = createPreviewShareUrl({ ...item, preview_token: res.preview_token, preview_enabled: true }, { preferLiveDomain: true });
+                            navigator.clipboard.writeText(newUrl);
+                            toast.success("New preview link generated & copied to clipboard!");
+                          } catch (err: any) {
+                            toast.error(err.message || "Failed to regenerate link");
+                          } finally {
+                            setIsProcessingLink(false);
+                          }
+                        }}
+                        className="flex items-center justify-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-3 py-2 text-xs font-semibold hover:bg-accent/90 transition-colors disabled:opacity-50"
+                      >
+                        {isProcessingLink ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+                        Regenerate Link
+                      </button>
+                    )}
+
+                    {item.preview_enabled !== false ? (
+                      <button
+                        type="button"
+                        disabled={isProcessingLink}
+                        onClick={async () => {
+                          try {
+                            setIsProcessingLink(true);
+                            const res = await regenerateWorkPreview(item.id);
+                            await queryClient.invalidateQueries({ queryKey: ["workItems"] });
+                            const newUrl = createPreviewShareUrl({ ...item, preview_token: res.preview_token, preview_enabled: true }, { preferLiveDomain: true });
+                            navigator.clipboard.writeText(newUrl);
+                            toast.success("New preview link generated & copied to clipboard!");
+                          } catch (err: any) {
+                            toast.error(err.message || "Failed to regenerate link");
+                          } finally {
+                            setIsProcessingLink(false);
+                          }
+                        }}
+                        className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-secondary/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+                      >
+                        {isProcessingLink ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+                        Regenerate
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const shareUrl = createPreviewShareUrl(item, { preferLiveDomain: true });
+                        navigator.clipboard.writeText(shareUrl);
+                        if (item.preview_enabled === false) {
+                          toast.warning("Copied link, but note this link is currently EXPIRED! Tap Regenerate Link to reactivate.");
+                        } else {
+                          toast.success("Client preview link copied to clipboard!");
+                        }
+                      }}
+                      className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-secondary/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors"
+                    >
+                      <Share2 className="size-3.5" />
+                      Copy Link
+                    </button>
+                  </>
                 )}
-
-                {item.preview_enabled !== false ? (
-                  <button
-                    type="button"
-                    disabled={isProcessingLink}
-                    onClick={async () => {
-                      try {
-                        setIsProcessingLink(true);
-                        const res = await regenerateWorkPreview(item.id);
-                        await queryClient.invalidateQueries({ queryKey: ["workItems"] });
-                        const newUrl = createPreviewShareUrl({ ...item, preview_token: res.preview_token, preview_enabled: true }, { preferLiveDomain: true });
-                        navigator.clipboard.writeText(newUrl);
-                        toast.success("New preview link generated & copied to clipboard!");
-                      } catch (err: any) {
-                        toast.error(err.message || "Failed to regenerate link");
-                      } finally {
-                        setIsProcessingLink(false);
-                      }
-                    }}
-                    className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-secondary/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
-                  >
-                    {isProcessingLink ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
-                    Regenerate
-                  </button>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const shareUrl = createPreviewShareUrl(item, { preferLiveDomain: true });
-                    navigator.clipboard.writeText(shareUrl);
-                    if (item.preview_enabled === false) {
-                      toast.warning("Copied link, but note this link is currently EXPIRED! Tap Regenerate Link to reactivate.");
-                    } else {
-                      toast.success("Client preview link copied to clipboard!");
-                    }
-                  }}
-                  className="flex items-center justify-center gap-1.5 rounded-lg border border-border bg-secondary/80 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors"
-                >
-                  <Share2 className="size-3.5" />
-                  Copy Link
-                </button>
 
                 <a 
                   href={`${item.file_url}?download=${encodeURIComponent(item.lead.name)}-${item.type}.${item.file_url.split('.').pop()}`}
@@ -485,6 +497,7 @@ function WorkCard({ item, appRole }: { item: any, appRole: string }) {
         open={previewOpen}
         onOpenChange={setPreviewOpen}
         workItem={item}
+        canManageLinks={appRole === 'admin'}
         onWorkItemUpdated={() => {
           queryClient.invalidateQueries({ queryKey: ["workItems"] });
         }}

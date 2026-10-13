@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { format, subDays } from "date-fns";
@@ -28,6 +28,11 @@ import { fetchActivities, fetchLeads, fetchPayments, fetchReminders } from "@/li
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
+  beforeLoad: ({ context }: any) => {
+    if (context?.appRole !== 'admin') {
+      throw redirect({ to: "/work" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Analytics — Crewvia BNI CRM" },

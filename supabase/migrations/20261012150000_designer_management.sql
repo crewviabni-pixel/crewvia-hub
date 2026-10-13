@@ -1,13 +1,52 @@
 -- ==============================================================================
--- CREWVIA BNI CRM: PRODUCTION DESIGNER USER PROVISIONING & MANAGEMENT RPC (FIXED)
+-- CREWVIA BNI CRM: PRODUCTION DESIGNER USER PROVISIONING & RBAC RPC (WITH CAMPAIGN ASSIGNMENT)
 -- ==============================================================================
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
--- 1. admin_create_designer
+-- 1. Designer Workspaces Junction Table
+CREATE TABLE IF NOT EXISTS public.designer_workspaces (
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  workspace_id UUID REFERENCES public.workspaces(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (user_id, workspace_id)
+);
+
+ALTER TABLE public.designer_workspaces ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admins have full access to designer_workspaces" ON public.designer_workspaces;
+CREATE POLICY "Admins have full access to designer_workspaces" ON public.designer_workspaces
+FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin')
+)
+WITH CHECK (
+  EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin')
+);
+
+DROP POLICY IF EXISTS "Designers can read own assigned workspaces" ON public.designer_workspaces;
+CREATE POLICY "Designers can read own assigned workspaces" ON public.designer_workspaces
+FOR SELECT TO authenticated
+USING (user_id = auth.uid());
+
+-- Update workspaces RLS so designers can only read assigned workspaces
+DROP POLICY IF EXISTS "Designers can read workspaces" ON public.workspaces;
+DROP POLICY IF EXISTS "Designers can read assigned workspaces" ON public.workspaces;
+CREATE POLICY "Designers can read assigned workspaces" ON public.workspaces
+FOR SELECT TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.designer_workspaces dw
+    WHERE dw.workspace_id = public.workspaces.id AND dw.user_id = auth.uid()
+  )
+);
+
+-- 2. admin_create_designer
 CREATE OR REPLACE FUNCTION public.admin_create_designer(
   p_username TEXT,
   p_password TEXT,
-  p_name TEXT DEFAULT ''
+  p_name TEXT DEFAULT '',
+  p_workspace_ids UUID[] DEFAULT ARRAY[]::UUID[]
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -21,6 +60,7 @@ DECLARE
   v_clean_username TEXT;
   v_clean_name TEXT;
   v_hashed_pw TEXT;
+  v_ws_id UUID;
 BEGIN
   v_caller_id := auth.uid();
 
@@ -52,24 +92,35 @@ BEGIN
     SELECT 1 FROM public.user_roles 
     WHERE lower(username) = v_clean_username
   ) THEN
-    RAISE EXCEPTION 'Username "%" is already taken.', v_clean_username;
+    RAISE EXCEPTION 'Username "%" is already taken. Please choose another username.', v_clean_username;
   END IF;
 
   v_email := v_clean_username || '@crewviabni.com';
+
+  -- Clean up any orphaned user in auth.users that has no role in public.user_roles
+  DELETE FROM auth.identities 
+  WHERE user_id IN (
+    SELECT id FROM auth.users 
+    WHERE lower(email) = lower(v_email) 
+      AND id NOT IN (SELECT user_id FROM public.user_roles)
+  );
+
+  DELETE FROM auth.users 
+  WHERE lower(email) = lower(v_email) 
+    AND id NOT IN (SELECT user_id FROM public.user_roles);
 
   -- Check if email already exists in auth.users
   IF EXISTS (
     SELECT 1 FROM auth.users 
     WHERE lower(email) = lower(v_email)
   ) THEN
-    RAISE EXCEPTION 'A user with email "%" already exists.', v_email;
+    RAISE EXCEPTION 'A user with email "%" already exists in authentication.', v_email;
   END IF;
 
   v_new_user_id := gen_random_uuid();
-  -- Use extensions.crypt and extensions.gen_salt explicitly
   v_hashed_pw := extensions.crypt(p_password, extensions.gen_salt('bf'));
 
-  -- Insert directly into auth.users with pre-confirmed email (zero email verification needed)
+  -- Insert directly into auth.users with pre-confirmed email
   INSERT INTO auth.users (
     instance_id,
     id,
@@ -108,6 +159,7 @@ BEGIN
     ''
   );
 
+  -- Insert identity into auth.identities
   INSERT INTO auth.identities (
     id,
     user_id,
@@ -129,7 +181,7 @@ BEGIN
   )
   ON CONFLICT DO NOTHING;
 
-  -- Insert into public.user_roles (with ON CONFLICT to gracefully handle any auth.users trigger)
+  -- Insert into public.user_roles (safely handles any auth.users trigger that may auto-insert)
   INSERT INTO public.user_roles (
     user_id,
     role,
@@ -148,6 +200,18 @@ BEGIN
     username = EXCLUDED.username,
     is_suspended = false;
 
+  -- Assign workspaces if provided
+  IF p_workspace_ids IS NOT NULL AND array_length(p_workspace_ids, 1) > 0 THEN
+    FOREACH v_ws_id IN ARRAY p_workspace_ids
+    LOOP
+      IF v_ws_id IS NOT NULL THEN
+        INSERT INTO public.designer_workspaces (user_id, workspace_id)
+        VALUES (v_new_user_id, v_ws_id)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END LOOP;
+  END IF;
+
   RETURN jsonb_build_object(
     'success', true,
     'user_id', v_new_user_id,
@@ -158,7 +222,48 @@ BEGIN
 END;
 $$;
 
--- 2. admin_reset_designer_password
+-- 3. admin_assign_designer_workspaces
+CREATE OR REPLACE FUNCTION public.admin_assign_designer_workspaces(
+  p_user_id UUID,
+  p_workspace_ids UUID[]
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  v_caller_id UUID;
+  v_ws_id UUID;
+BEGIN
+  v_caller_id := auth.uid();
+
+  -- Verify caller is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.user_roles 
+    WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: Only administrators can assign campaigns.';
+  END IF;
+
+  DELETE FROM public.designer_workspaces WHERE user_id = p_user_id;
+
+  IF p_workspace_ids IS NOT NULL THEN
+    FOREACH v_ws_id IN ARRAY p_workspace_ids
+    LOOP
+      IF v_ws_id IS NOT NULL THEN
+        INSERT INTO public.designer_workspaces (user_id, workspace_id)
+        VALUES (p_user_id, v_ws_id)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END LOOP;
+  END IF;
+
+  RETURN jsonb_build_object('success', true, 'user_id', p_user_id, 'assigned_count', coalesce(array_length(p_workspace_ids, 1), 0));
+END;
+$$;
+
+-- 4. admin_reset_designer_password
 CREATE OR REPLACE FUNCTION public.admin_reset_designer_password(
   p_user_id UUID,
   p_new_password TEXT
@@ -174,6 +279,7 @@ DECLARE
 BEGIN
   v_caller_id := auth.uid();
 
+  -- Verify caller is admin
   IF NOT EXISTS (
     SELECT 1 FROM public.user_roles 
     WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
@@ -196,7 +302,7 @@ BEGIN
 END;
 $$;
 
--- 3. admin_delete_designer
+-- 5. admin_delete_designer
 CREATE OR REPLACE FUNCTION public.admin_delete_designer(
   p_user_id UUID
 )
@@ -210,6 +316,7 @@ DECLARE
 BEGIN
   v_caller_id := auth.uid();
 
+  -- Verify caller is admin
   IF NOT EXISTS (
     SELECT 1 FROM public.user_roles 
     WHERE user_id = v_caller_id AND role = 'admin' AND is_suspended = false
@@ -217,6 +324,7 @@ BEGIN
     RAISE EXCEPTION 'Unauthorized: Only administrators can delete designers.';
   END IF;
 
+  -- Ensure we don't accidentally delete an admin
   IF EXISTS (
     SELECT 1 FROM public.user_roles 
     WHERE user_id = p_user_id AND role = 'admin'
@@ -224,6 +332,7 @@ BEGIN
     RAISE EXCEPTION 'Cannot delete an administrator account.';
   END IF;
 
+  DELETE FROM public.designer_workspaces WHERE user_id = p_user_id;
   DELETE FROM auth.identities WHERE user_id = p_user_id;
   DELETE FROM public.user_roles WHERE user_id = p_user_id;
   DELETE FROM auth.users WHERE id = p_user_id;
@@ -232,8 +341,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.admin_create_designer(TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_create_designer(TEXT, TEXT, TEXT, UUID[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_assign_designer_workspaces(UUID, UUID[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_reset_designer_password(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_delete_designer(UUID) TO authenticated;
-
-NOTIFY pgrst, 'reload schema';
