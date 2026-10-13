@@ -107,15 +107,12 @@ export function DocumentCanvasViewer({
 
     const updateSize = () => {
       const rect = wrapper.getBoundingClientRect();
-      const w = Math.floor(rect.width);
-      // In fullscreen, utilize available height minus padding; inline use window height budget
-      const h = isFullscreen
-        ? Math.floor(window.innerHeight - (window.innerWidth < 768 ? 40 : 80))
-        : Math.floor(Math.min(window.innerHeight * 0.70, 680));
+      const w = Math.floor(rect.width || wrapper.clientWidth);
+      const h = Math.floor(rect.height || wrapper.clientHeight);
 
       if (w > 0 && h > 0) {
         setContainerSize((prev) => {
-          if (prev.width === w && Math.abs(prev.height - h) < 4) return prev;
+          if (prev.width === w && Math.abs(prev.height - h) < 2) return prev;
           return { width: w, height: h };
         });
       }
@@ -306,7 +303,7 @@ export function DocumentCanvasViewer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [numPages, goToNextPage, goToPrevPage, toggleFullscreen, handleRotateClockwise]);
 
-  // 6. Fullscreen Change Event Sync
+  // 6. Fullscreen Change Event Sync & Body Scroll Lock
   useEffect(() => {
     const handleFsChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -315,6 +312,16 @@ export function DocumentCanvasViewer({
     document.addEventListener("fullscreenchange", handleFsChange);
     return () => document.removeEventListener("fullscreenchange", handleFsChange);
   }, []);
+
+  useEffect(() => {
+    if (isFullscreen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isFullscreen]);
 
   // 7. Forensic Watermark Drawing Function
   const drawWatermark = useCallback((displayW: number, displayH: number, dpr: number) => {
@@ -400,27 +407,18 @@ export function DocumentCanvasViewer({
       const effectiveNativeW = isRotated90or270 ? nativeH : nativeW;
       const effectiveNativeH = isRotated90or270 ? nativeW : nativeH;
 
-      const horizontalPadding = isFullscreen ? 16 : 8;
-      const verticalPadding = isFullscreen ? 16 : 8;
+      // Safe breathing padding (12px per side on mobile, 16px on desktop/fullscreen)
+      const padding = isFullscreen ? 16 : containerSize.width < 768 ? 12 : 16;
+      const availW = Math.max(containerSize.width - padding * 2, 120);
+      const availH = Math.max(containerSize.height - padding * 2, 120);
 
-      const availW = Math.max(containerSize.width - horizontalPadding, 220);
+      // Strict 100% contain fit across BOTH axes so slide NEVER overflows container box:
+      const scaleX = availW / effectiveNativeW;
+      const scaleY = availH / effectiveNativeH;
+      const baseFitScale = Math.min(scaleX, scaleY);
 
-      // On mobile screens in portrait view (not rotated 90/270 and not fullscreen):
-      // Fit to 100% width cleanly so text is readable and there are zero vertical dead letterbox gaps!
-      const isMobilePortrait = containerSize.width < 768 && !isRotated90or270 && !isFullscreen;
-
-      let baseFitScale: number;
-      if (isMobilePortrait) {
-        baseFitScale = availW / effectiveNativeW;
-      } else {
-        const availH = Math.max(containerSize.height - verticalPadding, 200);
-        const scaleX = availW / effectiveNativeW;
-        const scaleY = availH / effectiveNativeH;
-        baseFitScale = Math.min(scaleX, scaleY);
-      }
-
-      const displayW = Math.round(effectiveNativeW * baseFitScale * zoomLevel);
-      const displayH = Math.round(effectiveNativeH * baseFitScale * zoomLevel);
+      const displayW = Math.floor(effectiveNativeW * baseFitScale * zoomLevel);
+      const displayH = Math.floor(effectiveNativeH * baseFitScale * zoomLevel);
 
       return { baseFitScale, displayW, displayH, effectiveNativeW, effectiveNativeH };
     };
@@ -647,7 +645,7 @@ export function DocumentCanvasViewer({
       ref={containerRef}
       className={`relative flex flex-col items-center w-full select-none transition-all duration-200 ${
         isFullscreen
-          ? "fixed inset-0 z-50 bg-neutral-950 p-2 sm:p-4 h-screen w-screen overflow-hidden"
+          ? "fixed inset-0 z-50 bg-neutral-950 p-1.5 sm:p-3 h-[100dvh] max-h-[100dvh] w-screen overflow-hidden flex flex-col justify-between"
           : "bg-transparent md:bg-neutral-900/90 rounded-none md:rounded-2xl p-0 md:p-4 shadow-none md:shadow-2xl border-0 md:border md:border-border/40"
       }`}
       style={{
@@ -784,16 +782,18 @@ export function DocumentCanvasViewer({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`relative flex items-center justify-center w-full overflow-auto transition-all ${
+        className={`relative flex items-center justify-center w-full transition-all ${
           isFullscreen
             ? "flex-1 min-h-0 w-full"
             : rotation === 90 || rotation === 270
             ? "h-[54vh] min-h-[300px] max-h-[580px]"
-            : "h-auto min-h-[190px] max-h-[72vh] py-1"
-        } md:h-[68vh] md:min-h-[460px]`}
+            : "h-[50vh] min-h-[220px] max-h-[580px] md:h-[64vh] md:min-h-[420px] md:max-h-[640px]"
+        }`}
         style={{
+          overflow: zoomLevel > 1.05 ? "auto" : "hidden",
           touchAction: zoomLevel > 1.05 ? "pan-x pan-y" : "pan-y",
           overscrollBehavior: "contain",
+          scrollbarWidth: "thin",
         }}
       >
         {/* Loading Spinner */}
@@ -992,28 +992,33 @@ export function DocumentCanvasViewer({
         </div>
       </div>
 
-      {/* Mobile Subtle Security & Gesture Footer */}
-      <div className="flex md:hidden mt-2 items-center justify-center gap-1.5 text-[10px] text-neutral-400 px-2 text-center">
-        <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
-        <span>Protected Sandbox • Pinch to Zoom • Swipe Slides</span>
-      </div>
+      {/* Confidentiality & Gesture Footers (Hidden during fullscreen presentation mode) */}
+      {!isFullscreen && (
+        <>
+          {/* Mobile Subtle Security & Gesture Footer */}
+          <div className="flex md:hidden mt-2 items-center justify-center gap-1.5 text-[10px] text-neutral-400 px-2 text-center">
+            <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
+            <span>Protected Sandbox • Pinch to Zoom • Swipe Slides</span>
+          </div>
 
-      {/* Desktop Confidentiality Footer */}
-      <div className="hidden md:flex mt-2.5 flex-wrap items-center justify-between w-full max-w-4xl text-[11px] text-neutral-400 px-2 gap-1.5">
-        <span className="flex items-center gap-1.5">
-          <span className="size-1.5 rounded-full bg-emerald-500" />
-          <span>Protected Sandbox • Swipe / Double-Tap / Pinch to Zoom</span>
-        </span>
-        <div className="flex items-center gap-2">
-          {rotation !== 0 && (
-            <span className="text-accent font-semibold flex items-center gap-1">
-              <RotateCw className="size-3" />
-              <span>Rotated {rotation}°</span>
+          {/* Desktop Confidentiality Footer */}
+          <div className="hidden md:flex mt-2.5 flex-wrap items-center justify-between w-full max-w-4xl text-[11px] text-neutral-400 px-2 gap-1.5">
+            <span className="flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+              <span>Protected Sandbox • Swipe / Double-Tap / Pinch to Zoom</span>
             </span>
-          )}
-          {companyName && <span className="font-medium text-neutral-300 truncate max-w-[150px]">{companyName}</span>}
-        </div>
-      </div>
+            <div className="flex items-center gap-2">
+              {rotation !== 0 && (
+                <span className="text-accent font-semibold flex items-center gap-1">
+                  <RotateCw className="size-3" />
+                  <span>Rotated {rotation}°</span>
+                </span>
+              )}
+              {companyName && <span className="font-medium text-neutral-300 truncate max-w-[150px]">{companyName}</span>}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Slide Thumbnails & Quick Scrubber Bottom Sheet Modal */}
       {showSlideSheet && (

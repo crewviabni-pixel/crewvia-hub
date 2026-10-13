@@ -128,7 +128,7 @@ function PublicPreviewScreen() {
 
   return (
     <AntiBotShield>
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col selection:bg-accent selection:text-white">
+      <div className="min-h-screen w-full overflow-x-hidden bg-neutral-950 text-neutral-100 flex flex-col selection:bg-accent selection:text-white">
         {/* Top Branded Navigation Bar */}
         <header className="border-b border-neutral-800/80 bg-neutral-900/80 backdrop-blur-xl sticky top-0 z-40">
           <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between">
