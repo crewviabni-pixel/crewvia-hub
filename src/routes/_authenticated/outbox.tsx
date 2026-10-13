@@ -10,45 +10,74 @@ import { fetchLeadInformation, saveInformation, deleteInformationImage } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { money, initials } from "@/lib/crm";
 
+import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { matchIntelligentSearch } from "@/lib/utils";
+
 export const Route = createFileRoute("/_authenticated/outbox")({
   component: OutboxScreen,
 });
 
 function OutboxScreen() {
+  const { activeWorkspaceId } = useWorkspace();
+  const [term, setTerm] = useState("");
+
   const { data: leads = [], isLoading } = useQuery({
-    queryKey: ["outbox"],
+    queryKey: ["outbox", activeWorkspaceId],
     queryFn: async () => {
-      // 1. Fetch leads whose status requires info
+      if (!activeWorkspaceId) return [];
+      // 1. Fetch leads whose status requires info, scoped to the active workspace
       const { data: inboxLeads, error: inboxErr } = await supabase
         .from("leads")
         .select("*, work_items(*)")
+        .eq("workspace_id", activeWorkspaceId)
         .in("status", ["info_taken", "advance_received"])
         .order("updated_at", { ascending: false });
       
       if (inboxErr) throw inboxErr;
       
-      return inboxLeads.filter(lead => {
+      return (inboxLeads || []).filter(lead => {
         // Only show if there is no active work item for this exact stage
         const expectedType = lead.status === "info_taken" ? "draft" : "presentation";
         const hasActiveWork = (lead.work_items || []).some((w: any) => w.type === expectedType);
         return !hasActiveWork;
       });
-    }
+    },
+    enabled: !!activeWorkspaceId
   });
 
   const [activeLead, setActiveLead] = useState<any | null>(null);
 
+  const filteredLeads = leads.filter((lead) => {
+    if (!term.trim()) return true;
+    const hay = `${lead.name || ""} ${lead.phone || ""} ${lead.company || ""} ${lead.service || ""}`;
+    return matchIntelligentSearch(hay, term.trim());
+  });
+
   return (
     <AppShell title="Outbox" subtitle="Leads waiting for information to be added">
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Search outbox leads..."
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring sm:max-w-xs"
+        />
+      </div>
+
       {isLoading ? (
         <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
       ) : leads.length === 0 ? (
         <div className="p-8 text-center text-sm text-muted-foreground border border-dashed rounded-xl mt-4">
           No leads currently waiting in the outbox.
         </div>
+      ) : filteredLeads.length === 0 ? (
+        <div className="p-8 text-center text-sm text-muted-foreground border border-dashed rounded-xl mt-4">
+          No leads matching "{term}".
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-4">
-          {leads.map((lead) => (
+          {filteredLeads.map((lead) => (
             <div key={lead.id} className="rounded-xl border border-border bg-card p-4 shadow-sm flex flex-col gap-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2.5">
@@ -134,8 +163,10 @@ export function InformationModal({ lead, onClose, editOnly = false }: { lead: an
     onSuccess: () => {
       toast.success("Information saved successfully");
       queryClient.invalidateQueries({ queryKey: ["outbox"] });
-        if (editOnly) queryClient.invalidateQueries({ queryKey: ["workItems"] });
-        queryClient.invalidateQueries({ queryKey: ["lead-info-images", lead.id] });
+      queryClient.invalidateQueries({ queryKey: ["inboxCount"] });
+      queryClient.invalidateQueries({ queryKey: ["workItems"] });
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-info-images", lead.id] });
       onClose();
     },
     onError: (err: any) => {

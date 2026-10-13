@@ -60,6 +60,9 @@ export function useCrmRefresh() {
     void queryClient.invalidateQueries({ queryKey: ["activities"] });
     void queryClient.invalidateQueries({ queryKey: ["reminders"] });
     void queryClient.invalidateQueries({ queryKey: ["payments"] });
+    void queryClient.invalidateQueries({ queryKey: ["inboxCount"] });
+    void queryClient.invalidateQueries({ queryKey: ["outbox"] });
+    void queryClient.invalidateQueries({ queryKey: ["workItems"] });
   };
 }
 
