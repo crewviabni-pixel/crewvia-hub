@@ -130,39 +130,47 @@ function PublicPreviewScreen() {
     <AntiBotShield>
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col selection:bg-accent selection:text-white">
         {/* Top Branded Navigation Bar */}
-        <header className="border-b border-neutral-800/80 bg-neutral-900/70 backdrop-blur-xl sticky top-0 z-40">
-          <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="size-10 rounded-xl bg-neutral-900 border border-neutral-800 p-1.5 flex items-center justify-center shadow-md shrink-0">
+        <header className="border-b border-neutral-800/80 bg-neutral-900/80 backdrop-blur-xl sticky top-0 z-40">
+          <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between">
+            {/* Mobile Left: Brand + Lead Title */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="size-8 sm:size-10 rounded-xl bg-neutral-900 border border-neutral-800 p-1 sm:p-1.5 flex items-center justify-center shadow-md shrink-0">
                 <img src="/logo.png" alt="Crewvia Logo" className="size-full object-contain" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold tracking-tight text-white text-base">Crewvia BNI</span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    <ShieldCheck className="size-3" /> Verified Review
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold tracking-tight text-white text-xs sm:text-base truncate max-w-[150px] sm:max-w-none">
+                    {leadName}
+                  </span>
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shrink-0">
+                    <ShieldCheck className="size-2.5 sm:size-3" />
+                    <span>Verified</span>
                   </span>
                 </div>
-                <p className="text-[11px] text-neutral-400">Official Client Presentation Portal</p>
+                <p className="text-[10px] sm:text-[11px] text-neutral-400 truncate">
+                  {companyName ? `${companyName} • ` : ""}{typeLabel} Portal
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            {/* Right: Direct WhatsApp Action */}
+            <div className="flex items-center gap-2 shrink-0">
               <a
                 href={`https://wa.me/${CREWVIA_TEAM_WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hi Crewvia team, I am reviewing my ${typeLabel.toLowerCase()} (${cleanWorkId}).`)}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md shadow-emerald-900/30"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md shadow-emerald-950 active:scale-95"
               >
                 <MessageCircle className="size-3.5" />
-                <span>Contact Team</span>
+                <span className="hidden xs:inline sm:inline">WhatsApp</span>
+                <span className="xs:hidden sm:hidden">Chat</span>
               </a>
             </div>
           </div>
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 max-w-5xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-8 flex flex-col items-center pb-24 sm:pb-8">
+        <main className="flex-1 max-w-5xl w-full mx-auto px-2 sm:px-4 py-2 sm:py-8 flex flex-col items-center pb-20 sm:pb-8">
           {isQueryLoading ? (
             <div className="flex flex-col items-center justify-center min-h-[500px] w-full bg-neutral-900/40 rounded-2xl border border-neutral-800 p-8">
               <div className="size-10 border-2 border-accent border-t-transparent rounded-full animate-spin mb-4" />
@@ -219,9 +227,9 @@ function PublicPreviewScreen() {
               </a>
             </div>
           ) : (
-            <div className="w-full flex flex-col gap-3 sm:gap-6">
-              {/* Title & Metadata Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-neutral-900/50 p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-neutral-800/80">
+            <div className="w-full flex flex-col gap-2.5 sm:gap-6">
+              {/* Title & Metadata Header (Desktop only; on mobile & tablets, lead title is in the top app bar) */}
+              <div className="hidden md:flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-neutral-900/50 p-4 sm:p-5 rounded-2xl border border-neutral-800/80">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-semibold text-accent uppercase tracking-wider">
@@ -259,14 +267,14 @@ function PublicPreviewScreen() {
               />
 
               {/* Bottom Actions for Client */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-neutral-900 via-neutral-900/90 to-neutral-900/60 border border-neutral-800 mb-8 sm:mb-0">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 rounded-2xl bg-neutral-900/80 border border-neutral-800/80 shadow-lg mb-6 sm:mb-0 text-center sm:text-left">
                 <div>
-                  <h4 className="text-sm font-semibold text-white flex items-center gap-1.5">
-                    <Sparkles className="size-4 text-accent" />
-                    <span>Ready to approve or request changes?</span>
+                  <h4 className="text-sm font-semibold text-white flex items-center justify-center sm:justify-start gap-1.5">
+                    <Sparkles className="size-4 text-accent shrink-0" />
+                    <span>Ready to approve or request revisions?</span>
                   </h4>
                   <p className="text-xs text-neutral-400 mt-0.5">
-                    Reply directly to your Crewvia BNI coordinator on WhatsApp.
+                    Share your instant feedback with your Crewvia coordinator on WhatsApp.
                   </p>
                 </div>
 
@@ -274,7 +282,7 @@ function PublicPreviewScreen() {
                   href={`https://wa.me/${CREWVIA_TEAM_WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hi Crewvia team, I have reviewed the ${typeLabel.toLowerCase()} for ${leadName}. Here is my feedback:`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-lg shadow-emerald-950"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white transition-all shadow-lg shadow-emerald-950/60"
                 >
                   <MessageCircle className="size-4" />
                   <span>Send Feedback / Approval</span>

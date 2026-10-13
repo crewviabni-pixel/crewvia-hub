@@ -48,6 +48,15 @@ export function inspectClientEnvironment(): { isBot: boolean; reason: string | n
     return { isBot: true, reason: "Server or headless execution environment" };
   }
 
+  // Exempt local development and testing environments
+  if (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1" ||
+    window.location.hostname.endsWith(".local")
+  ) {
+    return { isBot: false, reason: null };
+  }
+
   const ua = navigator.userAgent || "";
 
   // 1. Check known AI crawler and scraper user agents
