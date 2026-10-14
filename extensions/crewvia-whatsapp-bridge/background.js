@@ -1,7 +1,8 @@
 /**
  * Crewvia WhatsApp Bridge - Background Service Worker
- * Manages FIFO queue, zero-reload tab reuse, dynamic script injection, and status dispatch.
- * STRICT ZERO-RELOAD ARCHITECTURE.
+ * Focuses WhatsApp tab on send for fast foreground execution (NO PAGE RELOAD),
+ * and automatically returns to the Crewvia CRM tab upon completion.
+ * VERSION: 1.0.8
  */
 
 const messageQueue = [];
@@ -10,8 +11,8 @@ let currentJob = null;
 let whatsappTabId = null;
 
 const DEFAULT_SETTINGS = {
-  minDelayMs: 2500,
-  maxDelayMs: 5000,
+  minDelayMs: 2000,
+  maxDelayMs: 4000,
   autoPinTab: true,
   dailySentCount: 0,
   lastSentDate: new Date().toDateString(),
@@ -22,53 +23,61 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (!current.settings) {
     await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
   }
-  console.log("[Crewvia Bridge] Background service worker initialized (Zero-Reload Architecture)");
+  console.log("[Crewvia Bridge] Background service worker initialized (v1.0.8 Strict Zero-Reload)");
 });
 
 // Helper: Get random jitter delay
 async function getJitterDelay() {
   const data = await chrome.storage.local.get("settings");
   const settings = data.settings || DEFAULT_SETTINGS;
-  const min = settings.minDelayMs || 2500;
-  const max = settings.maxDelayMs || 5000;
+  const min = settings.minDelayMs || 2000;
+  const max = settings.maxDelayMs || 4000;
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// Locate or launch WhatsApp Web tab (NEVER RELOADS EXISTING TAB)
+// Locate or open WhatsApp Web tab
 async function getOrOpenWhatsAppTab() {
   // 1. Direct query
-  const tabs = await chrome.tabs.query({ url: "*://web.whatsapp.com/*" });
-  if (tabs.length > 0 && tabs[0]?.id) {
-    whatsappTabId = tabs[0].id;
-    return { tabId: whatsappTabId, isNew: false };
+  const urlPatterns = ["*://web.whatsapp.com/*", "*://*.whatsapp.com/*"];
+  try {
+    const tabs = await chrome.tabs.query({ url: urlPatterns });
+    if (tabs.length > 0 && tabs[0]?.id) {
+      whatsappTabId = tabs[0].id;
+      return whatsappTabId;
+    }
+  } catch (e) {
+    console.warn("[Crewvia Bridge] URL query error:", e);
   }
 
-  // 2. Fallback search across all open tabs
+  // 2. Comprehensive search across ALL open tabs
   const allTabs = await chrome.tabs.query({});
-  const waTab = allTabs.find((t) => t.url && t.url.includes("web.whatsapp.com"));
+  const waTab = allTabs.find((t) => {
+    const url = (t.url || t.pendingUrl || "").toLowerCase();
+    const title = (t.title || "").toLowerCase();
+    return url.includes("web.whatsapp.com") || url.includes("whatsapp.com") || title.includes("whatsapp");
+  });
+
   if (waTab && waTab.id) {
     whatsappTabId = waTab.id;
-    return { tabId: whatsappTabId, isNew: false };
+    return whatsappTabId;
   }
 
-  // 3. Only create if no tab is currently open anywhere in the browser
-  console.log("[Crewvia Bridge] Opening WhatsApp Web tab for the first time...");
-  const newTab = await chrome.tabs.create({ url: "https://web.whatsapp.com", active: false });
+  // 3. Launch if not open
+  console.log("[Crewvia Bridge] Launching WhatsApp Web tab...");
+  const newTab = await chrome.tabs.create({ url: "https://web.whatsapp.com", active: true });
   whatsappTabId = newTab.id;
-  return { tabId: whatsappTabId, isNew: true };
+  return whatsappTabId;
 }
 
-// Ensure content script is active in the WhatsApp tab without reloading and without duplicates
+// Ensure content script is active in the WhatsApp tab without duplicates
 async function ensureContentScriptInjected(tabId) {
   try {
-    // Check if script is already running in this tab
     const checkResults = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => !!window.__crewviaWhatsAppScriptInjected,
+      func: () => window.__crewviaWhatsAppVersion === "1.0.8",
     });
 
     if (checkResults && checkResults[0] && checkResults[0].result === true) {
-      // Script is already active! Do NOT inject again.
       return;
     }
 
@@ -76,13 +85,13 @@ async function ensureContentScriptInjected(tabId) {
       target: { tabId },
       files: ["content-whatsapp.js"],
     });
-    console.log("[Crewvia Bridge] Content script dynamically attached to tab:", tabId);
+    console.log("[Crewvia Bridge] Content script attached (v1.0.8) to tab:", tabId);
   } catch (err) {
     console.warn("[Crewvia Bridge] Script verification check:", err.message);
   }
 }
 
-// Queue Processor - ABSOLUTELY ZERO RELOADS
+// Queue Processor - Swaps to WhatsApp tab (ZERO RELOAD), executes in-page send, and returns to CRM
 async function processQueue() {
   if (isProcessing || messageQueue.length === 0) {
     return;
@@ -95,40 +104,42 @@ async function processQueue() {
 
   try {
     const cleanPhone = (currentJob.phone || "").replace(/[^\d]/g, "");
-    const { tabId, isNew } = await getOrOpenWhatsAppTab();
 
-    // 45s safety timeout
+    // 35s safety timeout
     const jobTimeout = setTimeout(() => {
       if (currentJob && currentJob.messageId) {
         handleJobFinished({
           messageId: currentJob.messageId,
           success: false,
-          error: "Process timed out after 45 seconds.",
+          error: "Process timed out after 35 seconds.",
           reason: "timeout",
         });
       }
-    }, 45000);
+    }, 35000);
 
     currentJob.timeoutTimer = jobTimeout;
 
-    if (isNew) {
-      // First time WhatsApp Web is ever opened: wait for page load
-      console.log("[Crewvia Bridge] Waiting for initial load of WhatsApp Web...");
-      const listener = (tid, changeInfo) => {
-        if (tid === tabId && changeInfo.status === "complete") {
-          chrome.tabs.onUpdated.removeListener(listener);
-          setTimeout(async () => {
-            await ensureContentScriptInjected(tabId);
-            dispatchDirect(tabId, cleanPhone, currentJob.text, currentJob.messageId, currentJob.leadName);
-          }, 3500);
-        }
-      };
-      chrome.tabs.onUpdated.addListener(listener);
-    } else {
-      // Tab is ALREADY OPEN: Ensure script is attached & dispatch IMMEDIATELY without reload!
-      await ensureContentScriptInjected(tabId);
-      dispatchDirect(tabId, cleanPhone, currentJob.text, currentJob.messageId, currentJob.leadName);
-    }
+    // Step 1: Get the WhatsApp Web tab (REUSES EXISTING TAB, NEVER RELOADS)
+    const tabId = await getOrOpenWhatsAppTab();
+
+    // Step 2: Bring WhatsApp tab to foreground for fast 60fps execution
+    await chrome.tabs.update(tabId, { active: true });
+    try {
+      const tabObj = await chrome.tabs.get(tabId);
+      if (tabObj.windowId) {
+        await chrome.windows.update(tabObj.windowId, { focused: true });
+      }
+    } catch (e) {}
+
+    // Small delay to ensure tab focus is registered
+    await new Promise((r) => setTimeout(r, 350));
+
+    // Step 3: Ensure content script is attached
+    await ensureContentScriptInjected(tabId);
+
+    // Step 4: Dispatch in-page search & send (ABSOLUTELY ZERO RELOAD!)
+    dispatchDirect(tabId, cleanPhone, currentJob.text, currentJob.messageId, currentJob.leadName);
+
   } catch (err) {
     console.error("[Crewvia Bridge] Failed to dispatch job:", err);
     handleJobFinished({
@@ -140,7 +151,7 @@ async function processQueue() {
   }
 }
 
-// Dispatch directly to content script (NEVER EVER RELOADS)
+// Dispatch directly to content script
 function dispatchDirect(tabId, phone, text, messageId, leadName) {
   chrome.tabs.sendMessage(
     tabId,
@@ -153,14 +164,7 @@ function dispatchDirect(tabId, phone, text, messageId, leadName) {
     },
     (response) => {
       if (chrome.runtime.lastError) {
-        console.warn("[Crewvia Bridge] Content script error:", chrome.runtime.lastError.message);
-        // Do NOT reload the tab! Report retry or failure instead.
-        handleJobFinished({
-          messageId,
-          success: false,
-          error: "Could not send to WhatsApp Web tab. Please ensure WhatsApp Web is logged in.",
-          reason: "script_error",
-        });
+        console.warn("[Crewvia Bridge] Content script message warning:", chrome.runtime.lastError.message);
       }
     }
   );
@@ -176,6 +180,21 @@ async function handleJobFinished(result) {
 
   const finishedJob = currentJob;
   currentJob = null;
+
+  // Step 5: AUTOMATICALLY RETURN USER BACK TO THEIR CRM TAB!
+  if (finishedJob.sourceTabId) {
+    setTimeout(async () => {
+      try {
+        await chrome.tabs.update(finishedJob.sourceTabId, { active: true });
+        if (finishedJob.sourceWindowId) {
+          await chrome.windows.update(finishedJob.sourceWindowId, { focused: true });
+        }
+        console.log("[Crewvia Bridge] ✅ Refocused user back to CRM tab:", finishedJob.sourceTabId);
+      } catch (e) {
+        console.warn("[Crewvia Bridge] Refocus back to CRM tab error:", e);
+      }
+    }, 400);
+  }
 
   // Broadcast result back to Crewvia CRM tabs
   const crmTabs = await chrome.tabs.query({});
@@ -225,11 +244,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const job = {
       ...request.payload,
       sourceTabId: sender.tab?.id,
+      sourceWindowId: sender.tab?.windowId,
       queuedAt: Date.now(),
     };
     messageQueue.push(job);
     processQueue();
     sendResponse({ status: "QUEUED", queueLength: messageQueue.length });
+    return true;
+  }
+
+  if (request.type === "WA_STATUS_UPDATE") {
+    sendResponse({ status: "RECEIVED" });
     return true;
   }
 

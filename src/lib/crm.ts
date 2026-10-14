@@ -155,6 +155,18 @@ export function waHref(phone: string, text?: string) {
   return `https://web.whatsapp.com/send?${params.toString()}`;
 }
 
+/**
+ * Open WhatsApp Web `/send` in a **phone-specific** window so the browser doesn't
+ * reuse an existing WhatsApp Web tab that may have a different chat open.
+ * Each unique phone number gets its own window name, ensuring the correct
+ * recipient chat is always targeted.
+ */
+export function openWhatsAppChat(phone: string, text?: string) {
+  const url = waHref(phone, text);
+  const windowName = `wa_chat_${waNumber(phone)}`;
+  window.open(url, windowName);
+}
+
 export function money(value: number | string | null | undefined) {
   const n = Number(value ?? 0);
   return new Intl.NumberFormat("en-IN", {

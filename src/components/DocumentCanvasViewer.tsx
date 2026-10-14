@@ -4,6 +4,9 @@ import DisableDevtool from "disable-devtool";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  ArrowLeftRight,
   ZoomIn,
   ZoomOut,
   Maximize2,
@@ -78,6 +81,28 @@ export function DocumentCanvasViewer({
   // Mobile Slide Selector Sheet State
   const [showSlideSheet, setShowSlideSheet] = useState(false);
 
+  // Mobile Horizontal (Landscape) Detection & Dock Side Positioning
+  const [isMobileLandscape, setIsMobileLandscape] = useState(false);
+  const [dockPosition, setDockPosition] = useState<"right" | "left">("right");
+
+  useEffect(() => {
+    const checkLandscape = () => {
+      const isLandscape =
+        typeof window !== "undefined" &&
+        window.innerWidth > window.innerHeight &&
+        window.innerHeight <= 540;
+      setIsMobileLandscape(isLandscape);
+    };
+
+    checkLandscape();
+    window.addEventListener("resize", checkLandscape);
+    window.addEventListener("orientationchange", checkLandscape);
+    return () => {
+      window.removeEventListener("resize", checkLandscape);
+      window.removeEventListener("orientationchange", checkLandscape);
+    };
+  }, []);
+
   // Touch Gesture Refs (Pinch, Double Tap, Pan)
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -133,7 +158,7 @@ export function DocumentCanvasViewer({
       window.removeEventListener("resize", updateSize);
       window.removeEventListener("orientationchange", updateSize);
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, isMobileLandscape, dockPosition]);
 
   // 3. DevTools protection for public client preview
   useEffect(() => {
@@ -643,10 +668,22 @@ export function DocumentCanvasViewer({
   return (
     <div
       ref={containerRef}
-      className={`relative flex flex-col items-center w-full select-none transition-all duration-200 ${
+      className={`relative select-none transition-all duration-200 ${
         isFullscreen
-          ? "fixed inset-0 z-50 bg-neutral-950 p-1.5 sm:p-3 h-[100dvh] max-h-[100dvh] w-screen overflow-hidden flex flex-col justify-between"
-          : "bg-transparent md:bg-neutral-900/90 rounded-none md:rounded-2xl p-0 md:p-4 shadow-none md:shadow-2xl border-0 md:border md:border-border/40"
+          ? `fixed inset-0 z-50 bg-neutral-950 p-1.5 sm:p-2 h-[100dvh] max-h-[100dvh] w-screen overflow-hidden flex ${
+              isMobileLandscape
+                ? dockPosition === "left"
+                  ? "flex-row-reverse items-center justify-between gap-2"
+                  : "flex-row items-center justify-between gap-2"
+                : "flex-col items-center justify-between"
+            }`
+          : isMobileLandscape
+          ? `w-full flex ${
+              dockPosition === "left"
+                ? "flex-row-reverse items-center justify-between gap-2"
+                : "flex-row items-center justify-between gap-2"
+            } p-0 sm:p-1`
+          : "relative flex flex-col items-center w-full bg-transparent md:bg-neutral-900/90 rounded-none md:rounded-2xl p-0 md:p-4 shadow-none md:shadow-2xl border-0 md:border md:border-border/40"
       }`}
       style={{
         WebkitTouchCallout: "none",
@@ -656,8 +693,9 @@ export function DocumentCanvasViewer({
       onContextMenu={(e) => isPublicClientView && e.preventDefault()}
       onDragStart={(e) => e.preventDefault()}
     >
-      {/* Desktop / Tablet Top Controls Toolbar */}
-      <div className="sticky top-0 z-30 hidden md:flex items-center justify-between gap-2 w-full max-w-4xl px-3 sm:px-4 py-2 mb-3 bg-neutral-900/85 backdrop-blur-xl rounded-xl border border-neutral-800 shadow-xl">
+      {/* Desktop / Tablet Top Controls Toolbar (Hidden in mobile landscape) */}
+      {!isMobileLandscape && (
+        <div className="sticky top-0 z-30 hidden md:flex items-center justify-between gap-2 w-full max-w-4xl px-3 sm:px-4 py-2 mb-3 bg-neutral-900/85 backdrop-blur-xl rounded-xl border border-neutral-800 shadow-xl">
         {/* Left: Document Info */}
         <div className="flex items-center gap-2 text-xs font-semibold text-neutral-200 truncate max-w-xs">
           <Eye className="size-3.5 text-accent shrink-0" />
@@ -775,6 +813,7 @@ export function DocumentCanvasViewer({
           </button>
         </div>
       </div>
+      )}
 
       {/* Main Responsive Viewport Wrapper */}
       <div
@@ -782,12 +821,14 @@ export function DocumentCanvasViewer({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`relative flex items-center justify-center w-full transition-all ${
+        className={`relative flex items-center justify-center transition-all ${
           isFullscreen
-            ? "flex-1 min-h-0 w-full"
+            ? "flex-1 min-h-0 w-full h-full"
+            : isMobileLandscape
+            ? "flex-1 min-w-0 h-[calc(100dvh-3.25rem)] max-h-[96dvh]"
             : rotation === 90 || rotation === 270
-            ? "h-[54vh] min-h-[300px] max-h-[580px]"
-            : "h-[50vh] min-h-[220px] max-h-[580px] md:h-[64vh] md:min-h-[420px] md:max-h-[640px]"
+            ? "w-full h-[54vh] min-h-[300px] max-h-[580px]"
+            : "w-full h-[50vh] min-h-[220px] max-h-[580px] md:h-[64vh] md:min-h-[420px] md:max-h-[640px]"
         }`}
         style={{
           overflow: zoomLevel > 1.05 ? "auto" : "hidden",
@@ -884,8 +925,120 @@ export function DocumentCanvasViewer({
         )}
       </div>
 
-      {/* Slide Progress Line for Mobile */}
-      {fileType === "pdf" && numPages > 1 && (
+      {/* Mobile Horizontal (Landscape) Sleek Side Capsule Dock */}
+      {isMobileLandscape && (
+        <div
+          className="flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shrink-0 z-30 select-none animate-in fade-in duration-200"
+          style={{ maxHeight: "calc(100dvh - 1rem)" }}
+        >
+          {/* Dock Side Switcher (Right ↔ Left) */}
+          <button
+            onClick={() => setDockPosition((pos) => (pos === "right" ? "left" : "right"))}
+            className="size-8 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 active:scale-90 text-neutral-300 hover:text-white flex items-center justify-center border border-white/5 transition-all"
+            title={`Move controls to ${dockPosition === "right" ? "Left" : "Right"} side`}
+            aria-label="Switch side dock position"
+          >
+            <ArrowLeftRight className="size-3.5 text-accent" />
+          </button>
+
+          <div className="w-5 h-[1px] bg-neutral-800/80 my-0.5" />
+
+          {/* Slide Navigation (Vertical) */}
+          {fileType === "pdf" && numPages > 1 ? (
+            <div className="flex flex-col items-center gap-1 bg-neutral-800/90 rounded-xl p-0.5 border border-white/5 shadow-inner">
+              {/* Previous Slide */}
+              <button
+                onClick={goToPrevPage}
+                disabled={currentPage <= 1}
+                className="size-8 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-90 transition-all hover:bg-neutral-700/60"
+                title="Previous Slide"
+                aria-label="Previous Slide"
+              >
+                <ChevronUp className="size-4.5" />
+              </button>
+
+              {/* Slide Counter Pill */}
+              <button
+                onClick={() => setShowSlideSheet(true)}
+                className="w-8 py-1 text-[10px] font-mono font-bold text-white flex flex-col items-center justify-center active:scale-90 transition-all hover:text-accent"
+                title="Tap to browse all slides"
+              >
+                <span>{currentPage}</span>
+                <span className="text-neutral-500 text-[8px] leading-none">/</span>
+                <span className="text-neutral-400 text-[9px]">{numPages}</span>
+              </button>
+
+              {/* Next Slide */}
+              <button
+                onClick={goToNextPage}
+                disabled={currentPage >= numPages}
+                className="size-8 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-90 transition-all hover:bg-neutral-700/60"
+                title="Next Slide"
+                aria-label="Next Slide"
+              >
+                <ChevronDown className="size-4.5" />
+              </button>
+            </div>
+          ) : null}
+
+          <div className="w-5 h-[1px] bg-neutral-800/80 my-0.5" />
+
+          {/* Rotate 90° Clockwise */}
+          <button
+            onClick={handleRotateClockwise}
+            className={`size-8 rounded-xl flex items-center justify-center transition-all active:scale-90 border ${
+              rotation !== 0
+                ? "bg-accent text-accent-foreground font-bold border-accent shadow-md shadow-accent/25"
+                : "bg-neutral-800/90 text-neutral-200 border-white/5 hover:bg-neutral-700/70"
+            }`}
+            title={`Rotate 90° (Current: ${rotation}°)`}
+            aria-label="Rotate slide"
+          >
+            <RotateCw className="size-3.5" />
+          </button>
+
+          {/* Reset rotation if rotated */}
+          {rotation !== 0 && (
+            <button
+              onClick={handleResetRotation}
+              className="size-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-300 flex items-center justify-center border border-white/5 transition-all"
+              title="Reset rotation to 0°"
+              aria-label="Reset rotation to 0"
+            >
+              <RotateCcw className="size-3.5" />
+            </button>
+          )}
+
+          {/* Zoom Toggle */}
+          <button
+            onClick={() => {
+              setZoomLevel((prev) => (prev < 1.3 ? 1.6 : prev < 2.0 ? 2.2 : 1.0));
+            }}
+            className="size-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-200 text-[10px] font-mono font-semibold flex items-center justify-center border border-white/5 transition-all"
+            title="Tap to cycle zoom (Fit / 1.6x / 2.2x)"
+            aria-label="Toggle zoom"
+          >
+            {zoomLevel > 1.8 ? "2.2x" : zoomLevel > 1.2 ? "1.6x" : "Fit"}
+          </button>
+
+          {/* Fullscreen / Theater Mode Toggle */}
+          <button
+            onClick={toggleFullscreen}
+            className={`size-8 rounded-xl flex items-center justify-center transition-all active:scale-90 border ${
+              isFullscreen
+                ? "bg-accent text-accent-foreground border-accent shadow-md"
+                : "bg-neutral-800/90 text-neutral-200 border-white/5 hover:bg-neutral-700/70"
+            }`}
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen presentation"}
+            aria-label="Toggle Fullscreen"
+          >
+            {isFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+          </button>
+        </div>
+      )}
+
+      {/* Slide Progress Line for Mobile (Portrait only) */}
+      {fileType === "pdf" && numPages > 1 && !isMobileLandscape && (
         <div className="flex md:hidden w-full max-w-sm px-1 mt-1.5 h-1 bg-neutral-800/80 rounded-full overflow-hidden">
           <div
             className="bg-accent h-full transition-all duration-300 rounded-full"
@@ -894,8 +1047,9 @@ export function DocumentCanvasViewer({
         </div>
       )}
 
-      {/* Mobile Floating Action & Navigation Capsule */}
-      <div className="flex md:hidden items-center justify-between gap-1.5 w-full max-w-sm mx-auto mt-2 px-2.5 py-1.5 bg-neutral-900/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-xl">
+      {/* Mobile Floating Action & Navigation Capsule (Portrait only) */}
+      {!isMobileLandscape && (
+        <div className="flex md:hidden items-center justify-between gap-1.5 w-full max-w-sm mx-auto mt-2 px-2.5 py-1.5 bg-neutral-900/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-xl">
         {/* Left: Slide Navigation Pill */}
         {fileType === "pdf" && numPages > 1 ? (
           <div className="flex items-center bg-neutral-800/90 rounded-xl p-0.5 border border-white/5 shadow-inner">
@@ -991,9 +1145,10 @@ export function DocumentCanvasViewer({
           </button>
         </div>
       </div>
+      )}
 
-      {/* Confidentiality & Gesture Footers (Hidden during fullscreen presentation mode) */}
-      {!isFullscreen && (
+      {/* Confidentiality & Gesture Footers (Hidden during fullscreen or mobile landscape) */}
+      {!isFullscreen && !isMobileLandscape && (
         <>
           {/* Mobile Subtle Security & Gesture Footer */}
           <div className="flex md:hidden mt-2 items-center justify-center gap-1.5 text-[10px] text-neutral-400 px-2 text-center">
@@ -1027,7 +1182,7 @@ export function DocumentCanvasViewer({
           onClick={() => setShowSlideSheet(false)}
         >
           <div
-            className="w-full sm:max-w-md bg-neutral-900 border border-neutral-800 rounded-t-2xl sm:rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col"
+            className="w-full sm:max-w-md bg-neutral-900 border border-neutral-800 rounded-t-2xl sm:rounded-2xl p-4 sm:p-5 landscape:p-3 shadow-2xl space-y-4 landscape:space-y-2 max-h-[85vh] landscape:max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Sheet Pull Handle for mobile */}
@@ -1067,7 +1222,7 @@ export function DocumentCanvasViewer({
 
             {/* Slide Grid Buttons */}
             <div
-              className="flex-1 overflow-y-auto max-h-60 grid grid-cols-4 sm:grid-cols-5 gap-2 pr-1"
+              className="flex-1 overflow-y-auto max-h-56 sm:max-h-60 landscape:max-h-36 grid grid-cols-4 sm:grid-cols-5 landscape:grid-cols-6 gap-2 pr-1"
               style={{ scrollbarWidth: "thin" }}
             >
               {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => {

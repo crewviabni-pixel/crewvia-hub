@@ -61,61 +61,107 @@ export function CustomFieldsSettings() {
   if (!activeWorkspaceId) return null;
 
   return (
-    <div className="rounded-lg border border-border p-4 shadow-sm space-y-4">
-      <div className="space-y-0.5">
-        <label className="text-sm font-medium">Custom Dynamic Fields</label>
-        <p className="text-xs text-muted-foreground">Add custom data fields (e.g., Property Type, Budget) to your leads.</p>
+    <div className="rounded-xl border border-border bg-card p-5 shadow-sm space-y-4">
+      <div className="flex items-center justify-between pb-1">
+        <div className="space-y-0.5">
+          <label className="text-sm font-semibold">Custom Dynamic Fields</label>
+          <p className="text-xs text-muted-foreground">
+            Add custom lead properties (e.g., Property Type, Budget, Event Date) for this campaign.
+          </p>
+        </div>
+        {fields && fields.length > 0 && (
+          <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+            {fields.length} {fields.length === 1 ? "field" : "fields"}
+          </span>
+        )}
       </div>
       
-      <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-        {isLoading && <Loader2 className="size-4 animate-spin" />}
-        {fields?.map(field => (
-          <div key={field.id} className="flex items-center justify-between bg-secondary/30 rounded border p-2">
-            <div>
-              <p className="text-sm font-medium">{field.name}</p>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{field.field_type}</p>
-            </div>
-            <button
-              onClick={() => {
-                if (confirm(`Delete field "${field.name}"?`)) deleteMutation.mutate(field.id);
-              }}
-              className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
-            >
-              <Trash2 className="size-4" />
-            </button>
+      <div className="space-y-2">
+        {isLoading && (
+          <div className="flex items-center gap-2 py-4 justify-center text-xs text-muted-foreground">
+            <Loader2 className="size-4 animate-spin text-primary" />
+            <span>Loading custom fields...</span>
           </div>
-        ))}
-        {fields?.length === 0 && <p className="text-xs text-muted-foreground italic">No custom fields created yet.</p>}
+        )}
+        
+        {fields && fields.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
+            {fields.map((field) => (
+              <div
+                key={field.id}
+                className="flex items-center justify-between bg-muted/40 hover:bg-muted/70 rounded-xl border border-border/80 px-3 py-2 transition-colors"
+              >
+                <div className="min-w-0 pr-2">
+                  <p className="text-xs font-semibold text-foreground truncate">{field.name}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-1.5 py-0.2 bg-background border border-border/60 rounded text-muted-foreground">
+                      {field.field_type}
+                    </span>
+                    {field.field_type === "select" && Array.isArray(field.options) && field.options.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                        ({field.options.length} options)
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete custom field "${field.name}"?`)) deleteMutation.mutate(field.id);
+                  }}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                  title={`Delete field "${field.name}"`}
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          !isLoading && (
+            <div className="p-4 rounded-xl border border-dashed border-border/80 bg-muted/20 text-center">
+              <p className="text-xs text-muted-foreground">No custom fields created for this campaign yet.</p>
+              <p className="text-[11px] text-muted-foreground/75 mt-0.5">Use the form below to create one.</p>
+            </div>
+          )
+        )}
       </div>
 
-      <div className="pt-2 border-t flex flex-col gap-2">
-        <input 
-          placeholder="Field Name (e.g. Budget)" 
-          className={inputClass}
-          value={newName}
-          onChange={e => setNewName(e.target.value)}
-        />
-        <div className="flex gap-2">
-          <select className={cn(selectClass, "flex-1")} value={newType} onChange={e => setNewType(e.target.value as any)}>
+      <div className="pt-3 border-t border-border/80 space-y-2">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Create New Field
+        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+          <input 
+            placeholder="Field Name (e.g. Budget, City)" 
+            className={cn(inputClass, "sm:col-span-6")}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <select
+            className={cn(selectClass, "sm:col-span-4")}
+            value={newType}
+            onChange={(e) => setNewType(e.target.value as any)}
+          >
             <option value="text">Text Input</option>
             <option value="number">Number</option>
             <option value="date">Date</option>
-            <option value="select">Dropdown</option>
+            <option value="select">Dropdown Menu</option>
           </select>
           <button
             onClick={() => addMutation.mutate()}
             disabled={addMutation.isPending || !newName.trim()}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            className="sm:col-span-2 inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-all cursor-pointer"
           >
-            <Plus className="size-4" />
+            {addMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+            <span>Add</span>
           </button>
         </div>
         {newType === "select" && (
           <input 
-            placeholder="Options (comma separated)" 
+            placeholder="Dropdown options (comma separated, e.g. Villa, Apartment, Plot)" 
             className={inputClass}
             value={newOptions}
-            onChange={e => setNewOptions(e.target.value)}
+            onChange={(e) => setNewOptions(e.target.value)}
           />
         )}
       </div>

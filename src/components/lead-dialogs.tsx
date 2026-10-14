@@ -44,7 +44,6 @@ import {
   ACTION_CONFIG,
   ACTIVITY_LABEL,
   renderTemplate,
-  waHref,
 } from "@/lib/crm";
 import { changeStatus, completeReminder, createReminder, logCall, recordPayment, addNote, cancelAllReminders, fetchActivities, getNextMessageTemplate, recordTemplateUsage, fetchTemplatesForStatus,
   fetchTemplatesForStatusAndScenario,
@@ -725,30 +724,10 @@ export function SmartActionDialog({
         refresh();
         onOpenChange(false);
       } else {
-        // Fallback gracefully to WhatsApp Web so sending NEVER fails!
-        window.open(waHref(lead.phone, messageText.trim()), "_blank");
-        await logAutomatedWhatsapp(lead, messageText.trim());
-        if (activeSelectedTemplate) {
-          await recordTemplateUsage(
-            lead.id,
-            lead.status,
-            (activeSelectedTemplate.scenario as CallOutcome) || "connected",
-            activeSelectedTemplate.followup_order
-          );
-        }
-        await completeReminder(reminder);
-        if (nextStatus) {
-          await changeStatus(lead, nextStatus, undefined, reminderAt?.toISOString());
-        } else if (reminderAt) {
-          await createReminder({ leadId: lead.id, title: `Follow up with ${lead.name}`, dueAt: reminderAt.toISOString() });
-        }
-        toast.success(`WhatsApp Web opened & task completed!`, { id: toastId });
-        refresh();
-        onOpenChange(false);
+        toast.error(`WhatsApp auto-send failed: ${res.error || "Could not deliver message via extension"}`, { id: toastId });
       }
     } catch (err: any) {
-      window.open(waHref(lead.phone, messageText.trim()), "_blank");
-      toast.info(`Opened WhatsApp Web: ${err?.message || "Extension offline"}`, { id: toastId });
+      toast.error(`WhatsApp Bridge error: ${err?.message || "Extension offline"}`, { id: toastId });
     } finally {
       setSending(false);
     }
@@ -1473,15 +1452,10 @@ export function TemplateSuggester({ lead, status, scenario }: { lead: Lead; stat
         queryClient.invalidateQueries({ queryKey: ['leadTemplateProgress', lead.id, status, scenario] });
         queryClient.invalidateQueries({ queryKey: ['activities', lead.id] });
       } else {
-        window.open(waHref(lead.phone, msg), "_blank");
-        await logAutomatedWhatsapp(lead, msg);
-        await recordTemplateUsage(lead.id, status, scenario, activeTemplate.followup_order);
-        toast.success(`Opened WhatsApp Web!`, { id: toastId });
-        queryClient.invalidateQueries({ queryKey: ['leadTemplateProgress', lead.id, status, scenario] });
+        toast.error(`WhatsApp template send failed: ${res.error || "Extension delivery failed"}`, { id: toastId });
       }
     } catch (err: any) {
-      window.open(waHref(lead.phone, msg), "_blank");
-      toast.info(`Opened WhatsApp Web: ${err?.message || "Extension offline"}`, { id: toastId });
+      toast.error(`WhatsApp error: ${err?.message || "Extension offline"}`, { id: toastId });
     } finally {
       setSendingTemplate(false);
     }
@@ -1665,10 +1639,10 @@ export function CustomWhatsAppDialog({
         queryClient.invalidateQueries({ queryKey: ["activities", lead.id] });
         onOpenChange(false);
       } else {
-        toast.error(res.error || "Failed to deliver WhatsApp message", { id: toastId });
+        toast.error(`Failed to send WhatsApp message: ${res.error || "Could not deliver message via extension"}`, { id: toastId });
       }
     } catch (err: any) {
-      toast.error(err?.message || "Failed to dispatch WhatsApp message", { id: toastId });
+      toast.error(`WhatsApp error: ${err?.message || "Extension offline"}`, { id: toastId });
     } finally {
       setSending(false);
     }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Crewvia Hub — WhatsApp Bridge",
-  "version": "1.0.2",
+  "version": "1.0.8",
   "description": "Direct, 1-click automated WhatsApp message sender and CRM bridge for Crewvia Hub without page reloads.",
   "permissions": [
     "tabs",

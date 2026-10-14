@@ -131,10 +131,10 @@ function PublicPreviewScreen() {
       <div className="min-h-screen w-full overflow-x-hidden bg-neutral-950 text-neutral-100 flex flex-col selection:bg-accent selection:text-white">
         {/* Top Branded Navigation Bar */}
         <header className="border-b border-neutral-800/80 bg-neutral-900/80 backdrop-blur-xl sticky top-0 z-40">
-          <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between">
+          <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 landscape:h-11 flex items-center justify-between">
             {/* Mobile Left: Brand + Lead Title */}
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="size-8 sm:size-10 rounded-xl bg-neutral-900 border border-neutral-800 p-1 sm:p-1.5 flex items-center justify-center shadow-md shrink-0">
+              <div className="size-8 sm:size-10 landscape:size-7 rounded-xl bg-neutral-900 border border-neutral-800 p-1 sm:p-1.5 flex items-center justify-center shadow-md shrink-0">
                 <img src="/logo.png" alt="Crewvia Logo" className="size-full object-contain" />
               </div>
               <div className="min-w-0">
@@ -170,7 +170,7 @@ function PublicPreviewScreen() {
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 max-w-5xl w-full mx-auto px-2 sm:px-4 py-2 sm:py-8 flex flex-col items-center pb-20 sm:pb-8">
+        <main className="flex-1 max-w-5xl w-full mx-auto px-2 sm:px-4 py-2 sm:py-8 landscape:py-1 flex flex-col items-center pb-20 sm:pb-8 landscape:pb-4">
           {isQueryLoading ? (
             <div className="flex flex-col items-center justify-center min-h-[500px] w-full bg-neutral-900/40 rounded-2xl border border-neutral-800 p-8">
               <div className="size-10 border-2 border-accent border-t-transparent rounded-full animate-spin mb-4" />
@@ -227,9 +227,9 @@ function PublicPreviewScreen() {
               </a>
             </div>
           ) : (
-            <div className="w-full flex flex-col gap-2.5 sm:gap-6">
+            <div className="w-full flex flex-col gap-2.5 sm:gap-6 landscape:gap-1.5">
               {/* Title & Metadata Header (Desktop only; on mobile & tablets, lead title is in the top app bar) */}
-              <div className="hidden md:flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-neutral-900/50 p-4 sm:p-5 rounded-2xl border border-neutral-800/80">
+              <div className="hidden md:flex [@media(max-height:540px)]:!hidden flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-neutral-900/50 p-4 sm:p-5 rounded-2xl border border-neutral-800/80">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-semibold text-accent uppercase tracking-wider">

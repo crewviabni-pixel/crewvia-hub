@@ -66,7 +66,7 @@ export function useWhatsAppBridge() {
         setIsSending(false);
       }
 
-      if (type === "MESSAGE_FAILED") {
+      if (type === "MESSAGE_FAILED" || type === "SEND_RESULT") {
         const p = payload || event.data;
         const mid = p.messageId || messageId;
         const pending = pendingRequestsRef.current.get(mid);

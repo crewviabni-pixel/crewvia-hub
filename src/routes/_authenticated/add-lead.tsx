@@ -10,6 +10,7 @@ import { createLead, fetchCustomFields } from "@/lib/crm-api";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useCampaignPrice } from "@/lib/campaign-settings";
 export const Route = createFileRoute("/_authenticated/add-lead")({
   beforeLoad: ({ context }: any) => {
     if (context?.appRole !== 'admin') {
@@ -75,11 +76,14 @@ function AddLead() {
     enabled: isPhoneValid,
   });
 
-  // Hydrate default price from localStorage on client mount (SSR can't access localStorage)
+  // Hydrate campaign default price from database on mount or campaign change
+  const { price: campaignPrice } = useCampaignPrice(activeWorkspaceId);
+
   useEffect(() => {
-    const saved = localStorage.getItem("crewvia_default_price");
-    if (saved) setForm((f) => ({ ...f, deal_value: saved }));
-  }, []);
+    if (campaignPrice && !form.deal_value) {
+      setForm((f) => ({ ...f, deal_value: String(campaignPrice) }));
+    }
+  }, [campaignPrice]);
 
   const [reminderAt, setReminderAt] = useState("");
 
@@ -92,8 +96,7 @@ function AddLead() {
       
       let finalDealValue = Number(form.deal_value);
       if (!finalDealValue) {
-        const defaultPrice = localStorage.getItem("crewvia_default_price") || "10000";
-        finalDealValue = Number(defaultPrice);
+        finalDealValue = campaignPrice || 1699;
       }
 
       return createLead({
@@ -192,7 +195,7 @@ function AddLead() {
             inputMode="numeric"
             value={form.deal_value}
             onChange={(e) => set("deal_value", e.target.value)}
-            placeholder={typeof window !== "undefined" ? (localStorage.getItem("crewvia_default_price") || "10000") : "10000"}
+            placeholder={String(campaignPrice || 10000)}
           />
         </Labelled>
         <Labelled label="BNI Presentation Date">

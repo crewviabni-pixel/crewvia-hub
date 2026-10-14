@@ -34,7 +34,8 @@ export async function fetchCustomFields(workspaceId: string): Promise<CustomFiel
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  // Exclude internal system setting records (such as __campaign_default_price)
+  return (data ?? []).filter((f) => !f.name.startsWith("__"));
 }
 
 export async function fetchLead(id: string): Promise<Lead> {
@@ -357,6 +358,25 @@ export async function logAutomatedWhatsapp(lead: Lead, messagePreview?: string) 
 /* -------------------------------- reminders -------------------------------- */
 
 export async function createReminder(input: { leadId: string; title: string; dueAt: string }) {
+  // Deduplication: skip if a pending reminder for this lead already exists
+  // with a due_at within ±5 minutes of the requested time.
+  const requestedTime = new Date(input.dueAt).getTime();
+  const windowMs = 5 * 60 * 1000; // 5 minutes
+  const { data: existing } = await supabase
+    .from("reminders")
+    .select("id, due_at")
+    .eq("lead_id", input.leadId)
+    .eq("state", "pending")
+    .gte("due_at", new Date(requestedTime - windowMs).toISOString())
+    .lte("due_at", new Date(requestedTime + windowMs).toISOString())
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    // A near-identical reminder already exists — skip duplicate creation
+    console.info(`[createReminder] Skipped duplicate for lead ${input.leadId} (existing: ${existing[0]?.id})`);
+    return;
+  }
+
   const { error } = await supabase.from("reminders").insert({
     lead_id: input.leadId,
     title: input.title,

@@ -13,7 +13,7 @@
   // Broadcast readiness event for any listeners already waiting
   window.dispatchEvent(
     new CustomEvent("CREWVIA_WA_BRIDGE_READY", {
-      detail: { version: "1.0.2", status: "online" },
+      detail: { version: "1.0.8", status: "online" },
     })
   );
 
@@ -33,7 +33,7 @@
           source: BRIDGE_SOURCE_EXT,
           type: "PONG",
           messageId,
-          version: "1.0.2",
+          version: "1.0.8",
           status: "connected",
         },
         "*"
@@ -42,59 +42,92 @@
     }
 
     if (type === "SEND_MESSAGE") {
-      // Forward the send request to the background service worker
-      chrome.runtime.sendMessage(
-        {
-          type: "ENQUEUE_MESSAGE",
-          payload: {
-            ...payload,
-            messageId: messageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      if (typeof chrome === "undefined" || !chrome?.runtime?.id) {
+        window.postMessage(
+          {
+            source: BRIDGE_SOURCE_EXT,
+            type: "SEND_RESULT",
+            messageId,
+            leadId: payload?.leadId,
+            success: false,
+            error: "Extension was updated. Please refresh this tab.",
           },
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
+          "*"
+        );
+        return;
+      }
+
+      // Forward the send request to the background service worker
+      try {
+        chrome.runtime.sendMessage(
+          {
+            type: "ENQUEUE_MESSAGE",
+            payload: {
+              ...payload,
+              messageId: messageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            },
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              window.postMessage(
+                {
+                  source: BRIDGE_SOURCE_EXT,
+                  type: "SEND_RESULT",
+                  messageId,
+                  leadId: payload?.leadId,
+                  success: false,
+                  error: chrome.runtime.lastError.message || "Extension connection error",
+                },
+                "*"
+              );
+              return;
+            }
+
+            // Acknowledge receipt into extension queue
             window.postMessage(
               {
                 source: BRIDGE_SOURCE_EXT,
-                type: "SEND_RESULT",
+                type: "MESSAGE_QUEUED",
                 messageId,
                 leadId: payload?.leadId,
-                success: false,
-                error: chrome.runtime.lastError.message || "Extension connection error",
+                queueLength: response?.queueLength || 1,
               },
               "*"
             );
-            return;
           }
-
-          // Acknowledge receipt into extension queue
-          window.postMessage(
-            {
-              source: BRIDGE_SOURCE_EXT,
-              type: "MESSAGE_QUEUED",
-              messageId,
-              leadId: payload?.leadId,
-              queueLength: response?.queueLength || 1,
-            },
-            "*"
-          );
-        }
-      );
+        );
+      } catch (e) {
+        window.postMessage(
+          {
+            source: BRIDGE_SOURCE_EXT,
+            type: "SEND_RESULT",
+            messageId,
+            leadId: payload?.leadId,
+            success: false,
+            error: "Extension error: " + (e?.message || "Connection lost"),
+          },
+          "*"
+        );
+      }
       return;
     }
 
     if (type === "GET_STATUS") {
-      chrome.runtime.sendMessage({ type: "GET_BRIDGE_STATUS" }, (response) => {
-        window.postMessage(
-          {
-            source: BRIDGE_SOURCE_EXT,
-            type: "STATUS_REPORT",
-            messageId,
-            data: response || { connected: true },
-          },
-          "*"
-        );
-      });
+      if (typeof chrome === "undefined" || !chrome?.runtime?.id) return;
+      try {
+        chrome.runtime.sendMessage({ type: "GET_BRIDGE_STATUS" }, (response) => {
+          if (chrome.runtime.lastError) return;
+          window.postMessage(
+            {
+              source: BRIDGE_SOURCE_EXT,
+              type: "STATUS_REPORT",
+              messageId,
+              data: response || { connected: true },
+            },
+            "*"
+          );
+        });
+      } catch (e) {}
     }
   });
 
