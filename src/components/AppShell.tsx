@@ -112,10 +112,12 @@ export function AppShell({
       { to: "/templates", label: "Templates", icon: MessageCircle },
       { to: "/analytics", label: "Analytics", icon: BarChart3 },
       { to: "/designers", label: "Designers", icon: Shield },
+      { to: "/portfolio-manager", label: "Portfolio", icon: Sparkles },
     ];
   } else {
     navItems = [
       { to: "/work", label: "Work", icon: Briefcase },
+      { to: "/portfolio-manager", label: "Portfolio", icon: Sparkles },
     ];
   }
 
@@ -127,8 +129,10 @@ export function AppShell({
     { to: "/templates", label: "Templates", icon: MessageCircle },
     { to: "/analytics", label: "Analytics", icon: BarChart3 },
     { to: "/designers", label: "Designers", icon: Shield },
+    { to: "/portfolio-manager", label: "Portfolio", icon: Sparkles },
   ] : [
     { to: "/work", label: "Work", icon: Briefcase },
+    { to: "/portfolio-manager", label: "Portfolio", icon: Sparkles },
   ];
 
   async function signOut() {

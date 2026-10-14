@@ -11,11 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as AuthenticatedAddLeadRouteImport } from './routes/_authenticated/add-lead'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedDesignersRouteImport } from './routes/_authenticated/designers'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedOutboxRouteImport } from './routes/_authenticated/outbox'
+import { Route as AuthenticatedPortfolioManagerRouteImport } from './routes/_authenticated/portfolio-manager'
 import { Route as AuthenticatedRemindersRouteImport } from './routes/_authenticated/reminders'
 import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
 import { Route as AuthenticatedWorkRouteImport } from './routes/_authenticated/work'
@@ -29,6 +31,11 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortfolioRoute = PortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAddLeadRoute = AuthenticatedAddLeadRouteImport.update({
@@ -56,6 +63,12 @@ const AuthenticatedOutboxRoute = AuthenticatedOutboxRouteImport.update({
   path: '/outbox',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPortfolioManagerRoute =
+  AuthenticatedPortfolioManagerRouteImport.update({
+    id: '/portfolio-manager',
+    path: '/portfolio-manager',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedRemindersRoute = AuthenticatedRemindersRouteImport.update({
   id: '/reminders',
   path: '/reminders',
@@ -85,11 +98,13 @@ const AuthenticatedLeadsLeadIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/portfolio': typeof PortfolioRoute
   '/add-lead': typeof AuthenticatedAddLeadRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/designers': typeof AuthenticatedDesignersRoute
   '/leads': typeof AuthenticatedLeadsRouteWithChildren
   '/outbox': typeof AuthenticatedOutboxRoute
+  '/portfolio-manager': typeof AuthenticatedPortfolioManagerRoute
   '/reminders': typeof AuthenticatedRemindersRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/work': typeof AuthenticatedWorkRoute
@@ -98,11 +113,13 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/portfolio': typeof PortfolioRoute
   '/add-lead': typeof AuthenticatedAddLeadRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/designers': typeof AuthenticatedDesignersRoute
   '/leads': typeof AuthenticatedLeadsRouteWithChildren
   '/outbox': typeof AuthenticatedOutboxRoute
+  '/portfolio-manager': typeof AuthenticatedPortfolioManagerRoute
   '/reminders': typeof AuthenticatedRemindersRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/work': typeof AuthenticatedWorkRoute
@@ -113,11 +130,13 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/portfolio': typeof PortfolioRoute
   '/_authenticated/add-lead': typeof AuthenticatedAddLeadRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/designers': typeof AuthenticatedDesignersRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRouteWithChildren
   '/_authenticated/outbox': typeof AuthenticatedOutboxRoute
+  '/_authenticated/portfolio-manager': typeof AuthenticatedPortfolioManagerRoute
   '/_authenticated/reminders': typeof AuthenticatedRemindersRoute
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
   '/_authenticated/work': typeof AuthenticatedWorkRoute
@@ -128,11 +147,13 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/portfolio'
     | '/add-lead'
     | '/analytics'
     | '/designers'
     | '/leads'
     | '/outbox'
+    | '/portfolio-manager'
     | '/reminders'
     | '/templates'
     | '/work'
@@ -141,11 +162,13 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/portfolio'
     | '/add-lead'
     | '/analytics'
     | '/designers'
     | '/leads'
     | '/outbox'
+    | '/portfolio-manager'
     | '/reminders'
     | '/templates'
     | '/work'
@@ -155,11 +178,13 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/portfolio'
     | '/_authenticated/add-lead'
     | '/_authenticated/analytics'
     | '/_authenticated/designers'
     | '/_authenticated/leads'
     | '/_authenticated/outbox'
+    | '/_authenticated/portfolio-manager'
     | '/_authenticated/reminders'
     | '/_authenticated/templates'
     | '/_authenticated/work'
@@ -170,6 +195,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  PortfolioRoute: typeof PortfolioRoute
   PreviewWorkIdRoute: typeof PreviewWorkIdRoute
 }
 
@@ -187,6 +213,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portfolio': {
+      id: '/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/add-lead': {
@@ -222,6 +255,13 @@ declare module '@tanstack/react-router' {
       path: '/outbox'
       fullPath: '/outbox'
       preLoaderRoute: typeof AuthenticatedOutboxRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/portfolio-manager': {
+      id: '/_authenticated/portfolio-manager'
+      path: '/portfolio-manager'
+      fullPath: '/portfolio-manager'
+      preLoaderRoute: typeof AuthenticatedPortfolioManagerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/reminders': {
@@ -279,6 +319,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDesignersRoute: typeof AuthenticatedDesignersRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRouteWithChildren
   AuthenticatedOutboxRoute: typeof AuthenticatedOutboxRoute
+  AuthenticatedPortfolioManagerRoute: typeof AuthenticatedPortfolioManagerRoute
   AuthenticatedRemindersRoute: typeof AuthenticatedRemindersRoute
   AuthenticatedTemplatesRoute: typeof AuthenticatedTemplatesRoute
   AuthenticatedWorkRoute: typeof AuthenticatedWorkRoute
@@ -290,6 +331,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDesignersRoute: AuthenticatedDesignersRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRouteWithChildren,
   AuthenticatedOutboxRoute: AuthenticatedOutboxRoute,
+  AuthenticatedPortfolioManagerRoute: AuthenticatedPortfolioManagerRoute,
   AuthenticatedRemindersRoute: AuthenticatedRemindersRoute,
   AuthenticatedTemplatesRoute: AuthenticatedTemplatesRoute,
   AuthenticatedWorkRoute: AuthenticatedWorkRoute,
@@ -301,6 +343,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  PortfolioRoute: PortfolioRoute,
   PreviewWorkIdRoute: PreviewWorkIdRoute,
 }
 export const routeTree = rootRouteImport
