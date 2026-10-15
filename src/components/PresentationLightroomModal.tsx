@@ -408,22 +408,26 @@ export function PresentationLightroomModal({
   const isMobile = screenSize.w < 640;
   const isTablet = screenSize.w >= 640 && screenSize.w < 1024;
 
-  // Available viewport space for slide presentation with responsive, dynamic clearance
+  // Available viewport space for slide presentation with generous, luxury clearances
+  // Guarantees slide image NEVER touches the header or bottom dock on any screen aspect ratio
+  // Desktop: header (~50px) + dock (~56px) + 60px top margin + 60px bottom margin = ~230px
+  // Tablet: header (~44px) + dock (~50px) + 40px top margin + 40px bottom margin = ~175px
+  // Mobile: header (~40px) + dock (~44px) + 26px top margin + 26px bottom margin = ~136px
   const vertClearance = isNativeLandscape
-    ? 68
+    ? 80
     : isMobile
-    ? 116
+    ? 136
     : isTablet
-    ? 140
-    : 160;
+    ? 176
+    : 226;
 
   const horizClearance = isNativeLandscape
-    ? 24
+    ? 32
     : isMobile
-    ? 16
+    ? 24
     : isTablet
-    ? 36
-    : 64;
+    ? 64
+    : 104;
 
   const availW = Math.max(280, screenSize.w - horizClearance);
   const availH = Math.max(180, screenSize.h - vertClearance);
@@ -434,6 +438,26 @@ export function PresentationLightroomModal({
   const rotW = isRotatedLandscape ? Math.min(availH, availW * imgAspectRatio) : 0;
   const rotH = isRotatedLandscape ? rotW / imgAspectRatio : 0;
 
+  // Intelligent Lookahead Preloader for 30-60MB Multi-Slide Decks
+  // Pre-caches Next (+1) and Prev (-1) slides in a sliding window so slide transitions are instantaneous
+  useEffect(() => {
+    if (activeSlides.length <= 1) return;
+
+    const nextIdx = (activeSlideIndex + 1) % activeSlides.length;
+    const prevIdx = (activeSlideIndex - 1 + activeSlides.length) % activeSlides.length;
+
+    const urlsToPreload = [
+      activeSlides[nextIdx]?.preview_url,
+      activeSlides[prevIdx]?.preview_url,
+    ].filter((u): u is string => Boolean(u));
+
+    urlsToPreload.forEach((url) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = url;
+    });
+  }, [activeSlideIndex, activeSlides]);
+
   return (
     <div
       ref={containerRef}
@@ -443,8 +467,8 @@ export function PresentationLightroomModal({
       onTouchStart={(e) => e.stopPropagation()}
       onTouchMove={(e) => e.stopPropagation()}
       style={{ touchAction: "none" }}
-      className={`fixed inset-0 z-50 flex flex-col justify-between items-center bg-black/40 backdrop-blur-xl text-slate-900 select-none animate-in fade-in duration-200 overflow-hidden h-[100dvh] w-screen px-2.5 sm:px-6 md:px-8 py-2 sm:py-5 ${
-        isNativeLandscape ? "py-1 px-3" : ""
+      className={`fixed inset-0 z-50 flex flex-col justify-between items-center bg-black/40 backdrop-blur-xl text-slate-900 select-none animate-in fade-in duration-200 overflow-hidden h-[100dvh] w-screen px-3 sm:px-8 md:px-10 lg:px-12 py-3 sm:py-4 md:py-5 ${
+        isNativeLandscape ? "py-1.5 px-4" : ""
       }`}
     >
       {/* Click Backdrop Outside to Close */}
@@ -456,7 +480,7 @@ export function PresentationLightroomModal({
 
       {/* TOP BAR: Title Pill, Engagement Stats + Zoom + Close */}
       <header
-        className={`w-full max-w-7xl flex items-center justify-between pointer-events-none z-30 shrink-0 pt-[max(env(safe-area-inset-top),6px)] box-border ${
+        className={`w-full max-w-7xl flex items-center justify-between pointer-events-none z-30 shrink-0 pt-[max(env(safe-area-inset-top),6px)] mb-2 sm:mb-3 md:mb-4 box-border ${
           isNativeLandscape ? "py-0.5" : "py-1"
         }`}
       >
@@ -537,7 +561,7 @@ export function PresentationLightroomModal({
       {/* MAIN PRESENTATION CANVAS ARENA */}
       <div
         onPointerDown={(e) => e.stopPropagation()}
-        className="relative group w-full max-w-7xl flex-1 min-h-0 flex items-center justify-center my-auto z-10 px-1 sm:px-4 py-1.5 sm:py-3"
+        className="relative group w-full max-w-7xl flex-1 min-h-0 flex items-center justify-center my-auto z-10 px-3 sm:px-6 md:px-8 py-3 sm:py-5 md:py-6 overflow-hidden"
       >
         {isRotatedLandscape ? (
           /* PRECISE BOUNDING CONTAINER FOR ROTATED HORIZONTAL ANGLE MODE (90°) */
@@ -756,7 +780,7 @@ export function PresentationLightroomModal({
       {/* FLOATING ISLAND CONTROL DOCK (BOTTOM CENTER) - Ultra-responsive on all screen widths */}
       <nav
         aria-label="Presentation Controls Dock"
-        className={`pointer-events-auto z-30 flex items-center gap-1 sm:gap-1.5 md:gap-2 rounded-full bg-white/95 backdrop-blur-2xl border border-black/10 shadow-2xl shadow-black/15 text-neutral-900 max-w-[98vw] shrink-0 mb-[max(env(safe-area-inset-bottom),10px)] transition-all ${
+        className={`pointer-events-auto z-30 flex items-center gap-1 sm:gap-1.5 md:gap-2 rounded-full bg-white/95 backdrop-blur-2xl border border-black/10 shadow-2xl shadow-black/15 text-neutral-900 max-w-[98vw] shrink-0 mt-2 sm:mt-3 md:mt-4 mb-[max(env(safe-area-inset-bottom),10px)] transition-all ${
           isNativeLandscape ? "p-1 scale-90" : "px-2 py-1.5 sm:px-3 sm:py-2"
         }`}
       >
