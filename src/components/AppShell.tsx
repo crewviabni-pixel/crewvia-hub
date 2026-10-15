@@ -21,11 +21,11 @@ import {
   Check,
   CheckCircle2,
   Database,
-  Sparkles,
   UploadCloud,
   Loader2,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { ModernAiSparkle } from "@/components/ui/modern-ai-sparkle";
 
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -112,12 +112,12 @@ export function AppShell({
       { to: "/templates", label: "Templates", icon: MessageCircle },
       { to: "/analytics", label: "Analytics", icon: BarChart3 },
       { to: "/designers", label: "Designers", icon: Shield },
-      { to: "/portfolio-manager", label: "Portfolio", icon: Sparkles },
+      { to: "/portfolio-manager", label: "Portfolio", icon: ModernAiSparkle },
     ];
   } else {
     navItems = [
       { to: "/work", label: "Work", icon: Briefcase },
-      { to: "/portfolio-manager", label: "Portfolio", icon: Sparkles },
+      { to: "/portfolio-manager", label: "Portfolio", icon: ModernAiSparkle },
     ];
   }
 
@@ -129,10 +129,10 @@ export function AppShell({
     { to: "/templates", label: "Templates", icon: MessageCircle },
     { to: "/analytics", label: "Analytics", icon: BarChart3 },
     { to: "/designers", label: "Designers", icon: Shield },
-    { to: "/portfolio-manager", label: "Portfolio", icon: Sparkles },
+    { to: "/portfolio-manager", label: "Portfolio", icon: ModernAiSparkle },
   ] : [
     { to: "/work", label: "Work", icon: Briefcase },
-    { to: "/portfolio-manager", label: "Portfolio", icon: Sparkles },
+    { to: "/portfolio-manager", label: "Portfolio", icon: ModernAiSparkle },
   ];
 
   async function signOut() {
@@ -192,9 +192,7 @@ export function AppShell({
 
           {/* Right: Actions & Tools */}
           <div className="flex items-center gap-2 shrink-0">
-            {actions ? (
-              <div className="shrink-0">{actions}</div>
-            ) : appRole === 'admin' ? (
+            {appRole === 'admin' && (
               <Link
                 to="/add-lead"
                 className="inline-flex h-8.5 items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-semibold text-white shadow-xs whitespace-nowrap shrink-0 transition-colors"
@@ -202,7 +200,7 @@ export function AppShell({
                 <Plus className="size-3.5" />
                 <span>New Lead</span>
               </Link>
-            ) : null}
+            )}
 
             <div className="h-5 w-px bg-border/80 mx-0.5 hidden sm:block shrink-0" />
 
@@ -242,10 +240,25 @@ export function AppShell({
       </header>
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
-        <div className="mb-5">
-          <h1 className="font-display text-2xl font-bold sm:text-3xl">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
-        </div>
+        {title || actions ? (
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-border/40">
+            <div>
+              {title ? (
+                <h1 className="font-display text-2xl font-bold sm:text-3xl tracking-tight text-foreground">
+                  {title}
+                </h1>
+              ) : null}
+              {subtitle ? (
+                <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+              ) : null}
+            </div>
+            {actions ? (
+              <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
+                {actions}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {children}
       </main>
 
@@ -496,7 +509,7 @@ function SettingsDialog({ appRole = "admin" }: { appRole?: string }) {
                 </DialogTitle>
                 {activeWorkspace && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
-                    <Sparkles className="size-3" />
+                    <ModernAiSparkle className="size-3" />
                     <span>{activeWorkspace.name}</span>
                   </span>
                 )}
