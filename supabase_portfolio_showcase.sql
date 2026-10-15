@@ -19,10 +19,14 @@ CREATE TABLE IF NOT EXISTS public.portfolio_items (
   published BOOLEAN DEFAULT true,
   display_order INTEGER DEFAULT 0,
   view_count INTEGER DEFAULT 0,
+  like_count INTEGER DEFAULT 0,
   work_item_id UUID REFERENCES public.work_items(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Ensure like_count exists if table already created previously
+ALTER TABLE public.portfolio_items ADD COLUMN IF NOT EXISTS like_count INTEGER DEFAULT 0;
 
 ALTER TABLE public.portfolio_items ENABLE ROW LEVEL SECURITY;
 
@@ -58,3 +62,17 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.increment_portfolio_views(UUID) TO anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.increment_portfolio_likes(p_id UUID, p_delta INTEGER)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.portfolio_items
+  SET like_count = GREATEST(0, COALESCE(like_count, 0) + p_delta)
+  WHERE id = p_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.increment_portfolio_likes(UUID, INTEGER) TO anon, authenticated;

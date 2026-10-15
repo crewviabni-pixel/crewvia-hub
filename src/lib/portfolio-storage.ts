@@ -108,35 +108,13 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 /**
- * One-time clean wipe on load to remove all old projects and ensure a completely clean slate
+ * Safe clean-up for legacy obsolete cache keys (NEVER touches active items or IndexedDB)
  */
 function ensureCleanSlateOnce(): void {
   if (typeof window === "undefined") return;
   try {
-    if (localStorage.getItem(WIPE_ONCE_KEY) !== "true") {
-      // Clear old storage keys
-      localStorage.removeItem("crewvia_portfolio_items_real_v3");
-      localStorage.removeItem("crewvia_portfolio_items_v4");
-      localStorage.removeItem("crewvia_portfolio_clean_slate_v4");
-      localStorage.removeItem("crewvia_portfolio_deleted_ids_v4");
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-
-      // Seed tombstone with old project IDs
-      const tombstones = new Set(KNOWN_OLD_PROJECT_IDS);
-      localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(tombstones)));
-
-      localStorage.setItem(WIPE_ONCE_KEY, "true");
-      memoryCache = [];
-      isLoaded = true;
-
-      // Clear IndexedDB object store
-      openDB().then((db) => {
-        try {
-          const tx = db.transaction(STORE_NAME, "readwrite");
-          tx.objectStore(STORE_NAME).clear();
-        } catch {}
-      }).catch(() => {});
-    }
+    localStorage.removeItem("crewvia_portfolio_items_real_v3");
+    localStorage.removeItem("crewvia_portfolio_items_v4");
   } catch {}
 }
 

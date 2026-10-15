@@ -36,6 +36,7 @@ import {
   togglePortfolioFeatured,
   generateFallbackCover,
   syncPortfolioToPublicCloud,
+  subscribeToPortfolioSync,
   type PortfolioItem,
   type PortfolioSlide,
 } from "@/lib/portfolio-api";
@@ -104,23 +105,18 @@ function AdminPortfolioPage() {
     queryFn: fetchAllPortfolioItems,
   });
 
-  // Automatic clean cloud sync on initial load: wipes any old dummy or removed projects from cloud registry
+  // Real-time cross-tab synchronization: keep all tabs updated without wiping or reloads
   useEffect(() => {
-    const cleaned = localStorage.getItem("crewvia_cloud_cleaned_v5");
-    if (!cleaned) {
-      localStorage.setItem("crewvia_cloud_cleaned_v5", "true");
-      clearAllPortfolioData()
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["admin-portfolio-items"] });
-          queryClient.invalidateQueries({ queryKey: ["published-portfolio-showcase"] });
-        })
-        .catch(console.warn);
-    }
-  }, []);
+    const unsubscribe = subscribeToPortfolioSync(() => {
+      queryClient.invalidateQueries({ queryKey: ["admin-portfolio-items"] });
+      queryClient.invalidateQueries({ queryKey: ["published-portfolio-showcase"] });
+    });
+    return unsubscribe;
+  }, [queryClient]);
 
-  // Auto-sync items to Supabase public storage so normal users/clients see exact items across devices
+  // Safe auto-sync: only syncs when items is populated (never wipes on empty initial state)
   useEffect(() => {
-    if (items) {
+    if (items && items.length > 0) {
       syncPortfolioToPublicCloud(items).catch(() => {});
     }
   }, [items]);
@@ -697,12 +693,45 @@ function AdminPortfolioPage() {
   const totalViews = items.reduce((acc, curr) => acc + (curr.view_count || 0), 0);
   const featuredCount = items.filter((i) => i.featured).length;
 
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+
+  // Manual 1-click cloud sync (pushes all current presentations to Supabase storage registry)
+  const handleManualCloudSync = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const success = await syncPortfolioToPublicCloud(items);
+      if (success) {
+        toast.success(`⭐ Synced ${items.length} presentations to live cloud showcase!`);
+      } else {
+        toast.info("Cloud sync attempted. Ensure your admin session is active.");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to sync to cloud");
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
   return (
     <AppShell
       title="Portfolio Showcase"
       subtitle="Manage your presentation portfolio and directly upload presentations with automatic slide extraction"
       actions={
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap w-full sm:w-auto shrink-0 justify-end">
+          <button
+            onClick={handleManualCloudSync}
+            disabled={isSyncingCloud}
+            className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 sm:px-3.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 transition-all shadow-xs flex-1 sm:flex-initial"
+            title="Sync all current presentation decks to live cloud showcase"
+          >
+            {isSyncingCloud ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <UploadCloud className="size-3.5" />
+            )}
+            <span>Sync Cloud</span>
+          </button>
+
           <a
             href="/portfolio"
             target="_blank"

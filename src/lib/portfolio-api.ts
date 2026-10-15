@@ -94,14 +94,98 @@ export function deduplicatePortfolioItems(items: PortfolioItem[]): PortfolioItem
   return cleanList;
 }
 
+const PORTFOLIO_CHANNEL_NAME = "crewvia_portfolio_sync_channel";
+let portfolioBroadcastChannel: BroadcastChannel | null = null;
+
+if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+  try {
+    portfolioBroadcastChannel = new BroadcastChannel(PORTFOLIO_CHANNEL_NAME);
+  } catch (e) {
+    portfolioBroadcastChannel = null;
+  }
+}
+
+/**
+ * Real-time Cross-Tab and Cross-Window Synchronization:
+ * Notifies all active tabs whenever a portfolio presentation is added, edited, or deleted.
+ */
+export function notifyPortfolioTabsChanged(): void {
+  if (typeof window === "undefined") return;
+  try {
+    // 1. BroadcastChannel for modern browsers (sub-millisecond instant notification)
+    portfolioBroadcastChannel?.postMessage({
+      type: "PORTFOLIO_SYNC",
+      timestamp: Date.now(),
+    });
+
+    // 2. Storage event trigger via localStorage key update for other windows/tabs
+    localStorage.setItem("crewvia_portfolio_last_updated", String(Date.now()));
+
+    // 3. In-tab custom DOM event
+    window.dispatchEvent(
+      new CustomEvent("crewvia-portfolio-changed", { detail: { timestamp: Date.now() } })
+    );
+  } catch {}
+}
+
+/**
+ * Subscribe to real-time portfolio changes across all browser tabs
+ */
+export function subscribeToPortfolioSync(onSync: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const handleBroadcast = (event: MessageEvent) => {
+    if (event.data?.type === "PORTFOLIO_SYNC") {
+      onSync();
+    }
+  };
+
+  const handleStorage = (event: StorageEvent) => {
+    if (
+      event.key === "crewvia_portfolio_last_updated" ||
+      event.key?.startsWith("crewvia_portfolio_items")
+    ) {
+      onSync();
+    }
+  };
+
+  const handleCustom = () => {
+    onSync();
+  };
+
+  if (portfolioBroadcastChannel) {
+    portfolioBroadcastChannel.addEventListener("message", handleBroadcast);
+  }
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener("crewvia-portfolio-changed", handleCustom);
+
+  return () => {
+    if (portfolioBroadcastChannel) {
+      portfolioBroadcastChannel.removeEventListener("message", handleBroadcast);
+    }
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener("crewvia-portfolio-changed", handleCustom);
+  };
+}
+
 /**
  * Sync manually added portfolio items to Supabase Public Storage (work_files/portfolio_registry.json)
  * Guarantees ONLY manually added items are synced so public users see exact manager items.
- * If empty array is provided, cleanly writes [] to the cloud registry.
+ * Includes a strict safety guard: NEVER overwrites with an empty array unless allowEmpty is explicitly true!
  */
-export async function syncPortfolioToPublicCloud(items?: PortfolioItem[]): Promise<boolean> {
+export async function syncPortfolioToPublicCloud(
+  items?: PortfolioItem[],
+  allowEmpty: boolean = false
+): Promise<boolean> {
   try {
     const listToSync = items !== undefined ? items : await loadPortfolioItemsFromStorage();
+
+    // STRICT SAFETY GUARD: Prevent uninitialized components or initial empty render states from wiping cloud
+    if ((!listToSync || listToSync.length === 0) && !allowEmpty) {
+      console.warn("Safety notice: blocked unpermitted empty cloud registry overwrite");
+      return false;
+    }
+
     const validOnly = deduplicatePortfolioItems((listToSync || []).filter(isManuallyAddedItem));
 
     // Sanitize items so that huge data URLs don't bloat the registry JSON
@@ -131,6 +215,8 @@ export async function syncPortfolioToPublicCloud(items?: PortfolioItem[]): Promi
       console.warn("Notice: could not sync portfolio_registry to storage bucket:", error.message);
       return false;
     }
+
+    notifyPortfolioTabsChanged();
     return true;
   } catch (e) {
     console.warn("syncPortfolioToPublicCloud encountered:", e);
@@ -182,7 +268,11 @@ export async function fetchPublishedPortfolioItems(): Promise<PortfolioItem[]> {
         metrics: Array.isArray(item.metrics) ? item.metrics : [],
       }));
       const clean = formatted.filter((i) => isManuallyAddedItem(i) && !deletedIds.has(i.id));
-      return clean;
+      const deduplicated = deduplicatePortfolioItems(clean);
+      for (const item of deduplicated) {
+        savePortfolioItemToStorage(item).catch(() => {});
+      }
+      return deduplicated;
     }
   } catch (err) {
     // Non-blocking fallback
@@ -206,6 +296,7 @@ export async function fetchPublishedPortfolioItems(): Promise<PortfolioItem[]> {
   for (const reg of cloudRegistry) {
     if (reg.published !== false && !deletedIds.has(reg.id)) {
       mergedMap.set(reg.id, reg);
+      savePortfolioItemToStorage(reg).catch(() => {});
     }
   }
 
@@ -243,7 +334,11 @@ export async function fetchAllPortfolioItems(): Promise<PortfolioItem[]> {
         metrics: Array.isArray(item.metrics) ? item.metrics : [],
       }));
       const clean = formatted.filter((i) => isManuallyAddedItem(i) && !deletedIds.has(i.id));
-      return deduplicatePortfolioItems(clean);
+      const deduplicated = deduplicatePortfolioItems(clean);
+      for (const item of deduplicated) {
+        savePortfolioItemToStorage(item).catch(() => {});
+      }
+      return deduplicated;
     }
   } catch (err) {
     // Non-blocking fallback
@@ -263,6 +358,7 @@ export async function fetchAllPortfolioItems(): Promise<PortfolioItem[]> {
   for (const reg of cloudRegistry) {
     if (!deletedIds.has(reg.id)) {
       mergedMap.set(reg.id, reg);
+      savePortfolioItemToStorage(reg).catch(() => {});
     }
   }
   for (const local of localItems) {
@@ -337,11 +433,15 @@ export async function createPortfolioItem(
   // 1. Immediately persist to IndexedDB & in-memory cache
   await savePortfolioItemToStorage(newItem);
 
-  // 2. Sync clean list to public cloud storage so normal users can see it
-  const allCurrent = await loadPortfolioItemsFromStorage();
-  syncPortfolioToPublicCloud(allCurrent).catch(console.warn);
+  // 2. Fetch both cloud registry and local items to ensure we NEVER overwrite previously saved decks from other tabs
+  const cloudItems = await fetchPublicCloudRegistry();
+  const localItems = await loadPortfolioItemsFromStorage();
+  const combined = deduplicatePortfolioItems([...cloudItems, ...localItems, newItem]);
 
-  // 3. Also attempt Supabase table insert
+  // 3. Sync clean merged list to public cloud storage
+  await syncPortfolioToPublicCloud(combined);
+
+  // 4. Also attempt Supabase table insert
   try {
     const { data, error } = await (supabase as any)
       .from("portfolio_items")
@@ -367,12 +467,14 @@ export async function createPortfolioItem(
 
     if (!error && data) {
       await savePortfolioItemToStorage(data);
+      notifyPortfolioTabsChanged();
       return data;
     }
   } catch (err) {
     console.warn("Supabase create notice:", err);
   }
 
+  notifyPortfolioTabsChanged();
   return newItem;
 }
 
@@ -398,9 +500,14 @@ export async function updatePortfolioItem(
 
   await savePortfolioItemToStorage(updatedItem);
 
-  // 2. Sync to public cloud storage
-  const allCurrent = await loadPortfolioItemsFromStorage();
-  syncPortfolioToPublicCloud(allCurrent).catch(console.warn);
+  // 2. Merge with cloud registry and sync
+  const cloudItems = await fetchPublicCloudRegistry();
+  const localItems = await loadPortfolioItemsFromStorage();
+  const combined = deduplicatePortfolioItems(
+    [...cloudItems, ...localItems].map((item) => (item.id === id ? updatedItem : item))
+  );
+
+  await syncPortfolioToPublicCloud(combined);
 
   // 3. Also attempt Supabase update
   try {
@@ -413,12 +520,14 @@ export async function updatePortfolioItem(
 
     if (!error && data) {
       await savePortfolioItemToStorage(data);
+      notifyPortfolioTabsChanged();
       return data;
     }
   } catch (err) {
     console.warn("Supabase update notice:", err);
   }
 
+  notifyPortfolioTabsChanged();
   return updatedItem;
 }
 
@@ -431,11 +540,15 @@ export async function deletePortfolioItem(id: string): Promise<void> {
   // 1. Mark in tombstone and remove from local IndexedDB + localStorage + memory cache
   await deletePortfolioItemFromStorage(id);
 
-  // 2. Load clean remaining items (strictly excludes tombstones and dummy decks)
-  const remaining = await loadPortfolioItemsFromStorage();
+  // 2. Load clean remaining items from local and cloud
+  const localRemaining = await loadPortfolioItemsFromStorage();
+  const cloudItems = (await fetchPublicCloudRegistry()).filter((i) => i.id !== id);
+  const combinedRemaining = deduplicatePortfolioItems([...cloudItems, ...localRemaining]).filter(
+    (i) => i.id !== id
+  );
 
   // 3. AWAIT public cloud storage update so the deleted item is gone from cloud BEFORE returning
-  await syncPortfolioToPublicCloud(remaining);
+  await syncPortfolioToPublicCloud(combinedRemaining, combinedRemaining.length === 0);
 
   // 4. Also attempt Supabase delete if table exists
   try {
@@ -443,6 +556,8 @@ export async function deletePortfolioItem(id: string): Promise<void> {
   } catch (err) {
     console.warn("Supabase delete notice:", err);
   }
+
+  notifyPortfolioTabsChanged();
 }
 
 /**
@@ -462,7 +577,7 @@ export async function togglePortfolioFeatured(id: string, featured: boolean): Pr
 /**
  * Increment view count
  */
-export async function incrementPortfolioViews(id: string): Promise<void> {
+export async function incrementPortfolioViews(id: string): Promise<number> {
   try {
     await (supabase as any).rpc("increment_portfolio_views", { p_id: id });
   } catch {
@@ -470,13 +585,98 @@ export async function incrementPortfolioViews(id: string): Promise<void> {
   }
 
   const existing = await fetchPortfolioItemById(id);
+  const nextCount = (existing?.view_count || 0) + 1;
   if (existing) {
-    await savePortfolioItemToStorage({
+    const updated = {
       ...existing,
-      view_count: (existing.view_count || 0) + 1,
-    });
+      view_count: nextCount,
+    };
+    await savePortfolioItemToStorage(updated);
+    const all = await loadPortfolioItemsFromStorage();
+    syncPortfolioToPublicCloud(all).catch(() => {});
+    notifyPortfolioTabsChanged();
   }
+  return nextCount;
 }
+
+const LIKED_DECKS_STORAGE_KEY = "crewvia_portfolio_liked_decks_v1";
+
+/**
+ * Get IDs of decks liked by this client
+ */
+export function getClientLikedDeckIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(LIKED_DECKS_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+}
+
+/**
+ * Save client's liked deck state locally
+ */
+export function saveClientLikedDeckId(id: string, liked: boolean): void {
+  if (typeof window === "undefined" || !id) return;
+  try {
+    const set = getClientLikedDeckIds();
+    if (liked) {
+      set.add(id);
+    } else {
+      set.delete(id);
+    }
+    localStorage.setItem(LIKED_DECKS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+/**
+ * Toggle or increment like count on a presentation deck
+ */
+export async function togglePortfolioLike(id: string, liked: boolean): Promise<number> {
+  saveClientLikedDeckId(id, liked);
+  const delta = liked ? 1 : -1;
+
+  try {
+    await (supabase as any).rpc("increment_portfolio_likes", {
+      p_id: id,
+      p_delta: delta,
+    });
+  } catch {
+    // Non-blocking fallback
+  }
+
+  const existing = await fetchPortfolioItemById(id);
+  const currentCount = Math.max(0, (existing?.like_count || 0) + delta);
+  if (existing) {
+    const updated = {
+      ...existing,
+      like_count: currentCount,
+    };
+    await savePortfolioItemToStorage(updated);
+    const all = await loadPortfolioItemsFromStorage();
+    syncPortfolioToPublicCloud(all).catch(() => {});
+    notifyPortfolioTabsChanged();
+  }
+  return currentCount;
+}
+
+/**
+ * Format numbers compactly (e.g. 128, 1.2k, 2.5m)
+ */
+export function formatCompactNumber(num: number = 0): string {
+  if (!num || num < 0) return "0";
+  if (num < 1000) return String(num);
+  if (num < 1000000) {
+    const k = (num / 1000).toFixed(1);
+    return k.endsWith(".0") ? `${Math.round(num / 1000)}k` : `${k}k`;
+  }
+  const m = (num / 1000000).toFixed(1);
+  return m.endsWith(".0") ? `${Math.round(num / 1000000)}m` : `${m}m`;
+}
+
 
 /**
  * Completely wipe ALL portfolio items across local storage, cloud storage registry,
@@ -488,13 +688,15 @@ export async function clearAllPortfolioData(): Promise<void> {
     await deletePortfolioItemFromStorage(item.id);
   }
   await clearAllPortfolioStorage();
-  await syncPortfolioToPublicCloud([]);
+  await syncPortfolioToPublicCloud([], true); // Explicitly allow empty here
 
   try {
     for (const item of items) {
       await (supabase as any).from("portfolio_items").delete().eq("id", item.id);
     }
   } catch {}
+
+  notifyPortfolioTabsChanged();
 }
 
 export const clearAllPortfolioItems = clearAllPortfolioData;

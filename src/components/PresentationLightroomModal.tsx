@@ -15,10 +15,18 @@ import {
   ZoomOut,
   RotateCw,
   Smartphone,
+  Eye,
+  Heart,
 } from "lucide-react";
 import type { PortfolioItem, PortfolioSlide } from "@/lib/portfolio-sample-decks";
 import { extractSlidesFromPdf } from "@/lib/presentation-uploader";
-import { updatePortfolioItem } from "@/lib/portfolio-api";
+import {
+  updatePortfolioItem,
+  togglePortfolioLike,
+  getClientLikedDeckIds,
+  formatCompactNumber,
+} from "@/lib/portfolio-api";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export interface PresentationLightroomModalProps {
@@ -89,26 +97,50 @@ export function PresentationLightroomModal({
   }, [deck.id, deck.pdf_url, deck.slide_count, activeSlides.length]);
 
   const totalSlides = activeSlides.length;
-  const currentSlide = activeSlides[activeSlideIndex] || activeSlides[0];
+  const currentSlide = activeSlides[activeSlideIndex] ?? activeSlides[0] ?? {
+    id: `slide-${deck.id}`,
+    slide_number: 1,
+    title: deck.title,
+    preview_url: deck.cover_image_url || "",
+  };
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
-  const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(0);
+  const [rotation, setRotation] = useState<0 | 90>(0);
   const [localCopied, setLocalCopied] = useState(false);
   const [touchOffset, setTouchOffset] = useState(0);
   const [isNativeLandscape, setIsNativeLandscape] = useState(false);
   const [imgAspectRatio, setImgAspectRatio] = useState<number>(16 / 9);
-  const [isSlideLoaded, setIsSlideLoaded] = useState(false);
+  const [isSlideLoaded, setIsSlideLoaded] = useState(() => {
+    return Boolean(deck.slides?.[0]?.preview_url || deck.cover_image_url);
+  });
   const slideImgRef = useRef<HTMLImageElement>(null);
 
+  // Client Like and View tracking state
+  const [isLiked, setIsLiked] = useState(() => getClientLikedDeckIds().has(deck.id));
+  const [likeCount, setLikeCount] = useState(deck.like_count || 0);
+  const [viewCount, setViewCount] = useState(deck.view_count || 0);
+
   useEffect(() => {
-    if (slideImgRef.current && slideImgRef.current.complete && slideImgRef.current.naturalWidth > 0) {
+    setIsLiked(getClientLikedDeckIds().has(deck.id));
+    setLikeCount(deck.like_count || 0);
+    setViewCount(deck.view_count || 0);
+  }, [deck.id, deck.like_count, deck.view_count]);
+
+  const handleLikeToggle = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextLiked = !isLiked;
+    setIsLiked(nextLiked);
+    setLikeCount((prev) => Math.max(0, prev + (nextLiked ? 1 : -1)));
+    await togglePortfolioLike(deck.id, nextLiked);
+  };
+
+  useEffect(() => {
+    if (slideImgRef.current && (slideImgRef.current.complete || slideImgRef.current.naturalWidth > 0)) {
       setIsSlideLoaded(true);
-    } else {
-      setIsSlideLoaded(false);
     }
-  }, [currentSlide?.preview_url]);
+  }, [currentSlide.preview_url]);
 
   const [screenSize, setScreenSize] = useState({
     w: typeof window !== "undefined" ? window.innerWidth : 400,
@@ -124,10 +156,15 @@ export function PresentationLightroomModal({
   // Monitor physical phone screen size and orientation changes
   useEffect(() => {
     const handleResize = () => {
-      setScreenSize({ w: window.innerWidth, h: window.innerHeight });
-      setIsNativeLandscape(
-        window.innerWidth > window.innerHeight && window.innerHeight <= 600
-      );
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      setScreenSize({ w, h });
+      const isLandscape = w > h;
+      setIsNativeLandscape(isLandscape);
+      // If user physically turns device into landscape, reset virtual rotation to 0 so it doesn't double-rotate
+      if (isLandscape) {
+        setRotation(0);
+      }
     };
     handleResize();
     window.addEventListener("resize", handleResize);
@@ -181,16 +218,16 @@ export function PresentationLightroomModal({
     setIndex(activeSlideIndex > 0 ? activeSlideIndex - 1 : totalSlides - 1);
   }, [activeSlideIndex, totalSlides, setIndex]);
 
-  // Rotate 90° Clockwise for Horizontal Angle Full View Mode
-  const handleRotateClockwise = useCallback(() => {
-    setRotation((prev) => (((prev + 90) % 360) as 0 | 90 | 180 | 270));
+  // Toggle between Normal Portrait View (0°) and Landscape Widescreen Angle View (90°)
+  // Prevents upside-down 180° rotation on any device
+  const handleToggleOrientation = useCallback(() => {
+    setRotation((prev) => (prev === 0 ? 90 : 0));
     try {
       if (navigator.vibrate) navigator.vibrate(12);
     } catch {
       // ignore
     }
   }, []);
-
 
   // Keyboard navigation
   useEffect(() => {
@@ -204,7 +241,7 @@ export function PresentationLightroomModal({
         e.preventDefault();
         handlePrev();
       } else if (e.key === "r" || e.key === "R") {
-        handleRotateClockwise();
+        handleToggleOrientation();
       } else if (e.key === "f" || e.key === "F") {
         toggleFullscreen();
       }
@@ -212,14 +249,15 @@ export function PresentationLightroomModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleNext, handlePrev, handleRotateClockwise, onClose]);
+  }, [handleNext, handlePrev, handleToggleOrientation, onClose]);
 
   // Mobile Touch Gestures: Horizontal Swipe & Pull-down to Dismiss (isolated from background)
   const handleTouchStart = (e: React.TouchEvent) => {
     e.stopPropagation();
-    if (e.touches.length === 1) {
-      touchStartXRef.current = e.touches[0].clientX;
-      touchStartYRef.current = e.touches[0].clientY;
+    const touch = e.touches[0];
+    if (touch && e.touches.length === 1) {
+      touchStartXRef.current = touch.clientX;
+      touchStartYRef.current = touch.clientY;
       touchStartTimeRef.current = performance.now();
     }
   };
@@ -227,12 +265,14 @@ export function PresentationLightroomModal({
   const handleTouchMove = (e: React.TouchEvent) => {
     e.stopPropagation();
     if (isZoomed || touchStartXRef.current === null || touchStartYRef.current === null) return;
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const currentX = touch.clientX;
+    const currentY = touch.clientY;
     const deltaX = currentX - touchStartXRef.current;
     const deltaY = currentY - touchStartYRef.current;
 
-    // Apply interactive drag resistance only when horizontal
+    // Apply interactive drag resistance only when in normal orientation
     if (Math.abs(deltaX) > Math.abs(deltaY) * 1.2 && totalSlides > 1 && rotation === 0) {
       setTouchOffset(deltaX * 0.35);
     }
@@ -241,8 +281,10 @@ export function PresentationLightroomModal({
   const handleTouchEnd = (e: React.TouchEvent) => {
     e.stopPropagation();
     if (touchStartXRef.current === null || touchStartYRef.current === null) return;
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const touchEndX = touch.clientX;
+    const touchEndY = touch.clientY;
     const deltaX = touchEndX - touchStartXRef.current;
     const deltaY = touchEndY - touchStartYRef.current;
     const elapsedTime = performance.now() - touchStartTimeRef.current;
@@ -252,15 +294,10 @@ export function PresentationLightroomModal({
     // Swipe gestures
     if (!isZoomed) {
       if (rotation === 90) {
-        if (deltaY < -35 || deltaX < -35) {
+        // In 90° rotated mode, horizontal slide navigation corresponds to vertical finger swipe
+        if (deltaY < -35) {
           handleNext();
-        } else if (deltaY > 35 || deltaX > 35) {
-          handlePrev();
-        }
-      } else if (rotation === 270) {
-        if (deltaY > 35 || deltaX < -35) {
-          handleNext();
-        } else if (deltaY < -35 || deltaX > 35) {
+        } else if (deltaY > 35) {
           handlePrev();
         }
       } else {
@@ -335,7 +372,7 @@ export function PresentationLightroomModal({
       return;
     }
 
-    if (currentSlide?.preview_url) {
+    if (currentSlide.preview_url) {
       try {
         toast.info("Downloading slide image...");
         const response = await fetch(currentSlide.preview_url);
@@ -367,15 +404,33 @@ export function PresentationLightroomModal({
   };
 
   const isShareCopied = isCopied || localCopied;
-  const isRotatedLandscape = rotation === 90 || rotation === 270;
+  const isRotatedLandscape = rotation === 90;
+  const isMobile = screenSize.w < 640;
+  const isTablet = screenSize.w >= 640 && screenSize.w < 1024;
 
-  // Available viewport space for slide presentation with symmetric, generous clearance
-  const vertClearance = isNativeLandscape ? 85 : screenSize.h >= 768 ? 200 : 160;
-  const horizClearance = isNativeLandscape ? 24 : screenSize.w >= 1024 ? 64 : 32;
+  // Available viewport space for slide presentation with responsive, dynamic clearance
+  const vertClearance = isNativeLandscape
+    ? 68
+    : isMobile
+    ? 116
+    : isTablet
+    ? 140
+    : 160;
+
+  const horizClearance = isNativeLandscape
+    ? 24
+    : isMobile
+    ? 16
+    : isTablet
+    ? 36
+    : 64;
+
   const availW = Math.max(280, screenSize.w - horizClearance);
   const availH = Math.max(180, screenSize.h - vertClearance);
 
-  // In rotated landscape, calculate exact fitting dimensions so 100% of the slide is visible with 0 cuts
+  // In rotated landscape mode (90° on portrait phone):
+  // The slide's long edge (width) is oriented vertically along availH
+  // The slide's short edge (height) is oriented horizontally along availW
   const rotW = isRotatedLandscape ? Math.min(availH, availW * imgAspectRatio) : 0;
   const rotH = isRotatedLandscape ? rotW / imgAspectRatio : 0;
 
@@ -388,8 +443,8 @@ export function PresentationLightroomModal({
       onTouchStart={(e) => e.stopPropagation()}
       onTouchMove={(e) => e.stopPropagation()}
       style={{ touchAction: "none" }}
-      className={`fixed inset-0 z-50 flex flex-col justify-between items-center bg-black/40 backdrop-blur-xl text-slate-900 select-none animate-in fade-in duration-200 overflow-hidden h-[100dvh] w-screen px-3 sm:px-6 md:px-8 py-3 sm:py-5 ${
-        isNativeLandscape ? "py-1.5 px-3" : ""
+      className={`fixed inset-0 z-50 flex flex-col justify-between items-center bg-black/40 backdrop-blur-xl text-slate-900 select-none animate-in fade-in duration-200 overflow-hidden h-[100dvh] w-screen px-2.5 sm:px-6 md:px-8 py-2 sm:py-5 ${
+        isNativeLandscape ? "py-1 px-3" : ""
       }`}
     >
       {/* Click Backdrop Outside to Close */}
@@ -399,26 +454,63 @@ export function PresentationLightroomModal({
         aria-label="Click outside to close preview"
       />
 
-      {/* TOP BAR: Title Pill + Zoom + Close (Harmoniously centered with max-w-7xl) */}
-      <header className="w-full max-w-7xl flex items-center justify-between pointer-events-none z-30 shrink-0 pt-[env(safe-area-inset-top,0px)] box-border">
-        {/* Left: Deck Title & Category Pill (Truncates cleanly to guarantee space for right controls) */}
-        <div className="pointer-events-auto min-w-0 max-w-[calc(100vw-110px)] sm:max-w-md flex items-center gap-1.5 sm:gap-2.5 px-3.5 py-1.5 sm:py-2 rounded-full bg-white/90 hover:bg-white backdrop-blur-xl border border-slate-200/80 text-slate-900 shadow-lg shadow-black/5 transition-all">
+      {/* TOP BAR: Title Pill, Engagement Stats + Zoom + Close */}
+      <header
+        className={`w-full max-w-7xl flex items-center justify-between pointer-events-none z-30 shrink-0 pt-[max(env(safe-area-inset-top),6px)] box-border ${
+          isNativeLandscape ? "py-0.5" : "py-1"
+        }`}
+      >
+        {/* Left: Deck Title, Category, Views & Like Capsule */}
+        <div className="pointer-events-auto min-w-0 max-w-[calc(100vw-96px)] sm:max-w-xl flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full bg-white/95 hover:bg-white backdrop-blur-xl border border-slate-200/80 text-slate-900 shadow-lg shadow-black/5 transition-all">
           <span className="size-2 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-400 shrink-0" />
-          <span className="text-xs sm:text-sm font-semibold tracking-tight truncate">
+          <span className="text-xs sm:text-sm font-semibold tracking-tight truncate max-w-[120px] xs:max-w-[180px] sm:max-w-[260px]">
             {deck.title}
           </span>
-          <span className="text-[10px] font-mono text-slate-600 px-2 py-0.5 rounded-full bg-slate-100 hidden sm:inline-block border border-slate-200/70 shrink-0">
+          <span className="text-[10px] font-mono text-slate-600 px-2 py-0.5 rounded-full bg-slate-100 hidden md:inline-block border border-slate-200/70 shrink-0">
             {deck.category}
           </span>
+
+          <div className="h-3.5 w-px bg-slate-200 shrink-0 hidden xs:block" />
+
+          {/* Integrated Views Counter */}
+          <div
+            className="hidden xs:flex items-center gap-1 text-[11px] font-semibold text-slate-600 select-none shrink-0"
+            title={`${viewCount} total client views`}
+          >
+            <Eye className="size-3.5 text-cyan-600 shrink-0" />
+            <span>{formatCompactNumber(viewCount)}</span>
+          </div>
+
+          <div className="h-3.5 w-px bg-slate-200/80 shrink-0 hidden xs:block" />
+
+          {/* Integrated Interactive Like Button */}
+          <button
+            onClick={handleLikeToggle}
+            title={isLiked ? "Unlike presentation" : "Like presentation"}
+            className={cn(
+              "hidden xs:flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-semibold transition-all active:scale-90 select-none shrink-0",
+              isLiked
+                ? "text-rose-600 bg-rose-50 font-bold"
+                : "text-slate-600 hover:text-rose-600 hover:bg-slate-100"
+            )}
+          >
+            <Heart
+              className={cn(
+                "size-3.5 transition-colors shrink-0",
+                isLiked ? "fill-rose-500 text-rose-500 animate-pulse" : "text-slate-500"
+              )}
+            />
+            <span>{formatCompactNumber(likeCount)}</span>
+          </button>
         </div>
 
-        {/* Right: Controls Capsule (Zoom and Close with guaranteed right margins) */}
+        {/* Right: Controls Capsule (Zoom and Close with guaranteed margins) */}
         <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Zoom Toggle for Fine Detail Inspection */}
           <button
             onClick={() => setIsZoomed(!isZoomed)}
             title={isZoomed ? "Reset Zoom" : "Zoom In (Double-tap slide)"}
-            className={`size-8.5 sm:size-10 rounded-full backdrop-blur-xl border flex items-center justify-center transition-all shadow-md active:scale-90 shrink-0 ${
+            className={`size-8 sm:size-9.5 rounded-full backdrop-blur-xl border flex items-center justify-center transition-all shadow-md active:scale-90 shrink-0 ${
               isZoomed
                 ? "bg-primary text-white border-primary shadow-primary/30"
                 : "bg-white/90 hover:bg-white border-slate-200/80 text-slate-700 hover:text-slate-950"
@@ -431,24 +523,24 @@ export function PresentationLightroomModal({
             )}
           </button>
 
-          {/* Floating High-Contrast 'X' Close Button (100% visible, never cut off) */}
+          {/* Floating High-Contrast 'X' Close Button */}
           <button
             onClick={onClose}
             title="Close Preview (Esc or Swipe down)"
-            className="size-8.5 sm:size-10 rounded-full bg-slate-900/90 hover:bg-slate-950 active:scale-95 text-white backdrop-blur-md flex items-center justify-center transition-all shadow-xl border border-white/20 hover:rotate-90 duration-200 shrink-0"
+            className="size-8 sm:size-9.5 rounded-full bg-slate-900/90 hover:bg-slate-950 active:scale-95 text-white backdrop-blur-md flex items-center justify-center transition-all shadow-xl border border-white/20 hover:rotate-90 duration-200 shrink-0"
           >
-            <X className="size-4 sm:size-5" />
+            <X className="size-4 sm:size-4.5" />
           </button>
         </div>
       </header>
 
-      {/* MAIN PRESENTATION CANVAS ARENA (Evenly Centered with Symmetric Clearances) */}
+      {/* MAIN PRESENTATION CANVAS ARENA */}
       <div
         onPointerDown={(e) => e.stopPropagation()}
-        className="relative group w-full max-w-7xl flex-1 min-h-0 flex items-center justify-center my-auto z-10 px-1 sm:px-4 py-2 sm:py-4"
+        className="relative group w-full max-w-7xl flex-1 min-h-0 flex items-center justify-center my-auto z-10 px-1 sm:px-4 py-1.5 sm:py-3"
       >
         {isRotatedLandscape ? (
-          /* PRECISE BOUNDING CONTAINER FOR ROTATED HORIZONTAL ANGLE MODE (90° / 270°) */
+          /* PRECISE BOUNDING CONTAINER FOR ROTATED HORIZONTAL ANGLE MODE (90°) */
           <div
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -468,7 +560,7 @@ export function PresentationLightroomModal({
                 position: "absolute",
                 left: "50%",
                 top: "50%",
-                transform: `translate(-50%, -50%) rotate(${rotation}deg) ${isZoomed ? "scale(1.5)" : ""}`,
+                transform: `translate(-50%, -50%) rotate(90deg) ${isZoomed ? "scale(1.5)" : ""}`,
                 transformOrigin: "center center",
                 transition: "transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
               }}
@@ -481,12 +573,8 @@ export function PresentationLightroomModal({
 
                   {/* Personalized Crewvia Studio Plaque with Shining Border */}
                   <div className="relative p-[1.5px] rounded-2xl overflow-hidden shadow-2xl shadow-cyan-950/40">
-                    {/* Animated Shining Border (Luminous border light flow around the card) */}
                     <div className="absolute inset-0 bg-[linear-gradient(115deg,transparent_20%,rgba(56,189,248,0.7)_50%,transparent_80%)] bg-[length:200%_100%] animate-shimmer pointer-events-none" />
-
-                    {/* Inner Branded Glass Badge */}
                     <div className="relative px-5 py-3.5 rounded-[15px] bg-slate-950/90 backdrop-blur-xl flex flex-col items-center justify-center gap-2 border border-white/10">
-                      {/* Crewvia Logo with subtle breathing aura */}
                       <div className="flex items-center gap-2.5">
                         <img
                           src="/logo.png"
@@ -500,8 +588,6 @@ export function PresentationLightroomModal({
                           </span>
                         </span>
                       </div>
-
-                      {/* Personalized Slide Position Tracker */}
                       <div className="flex items-center gap-2 pt-1 border-t border-white/10 w-full justify-center">
                         <span className="size-1.5 rounded-full bg-cyan-400 animate-pulse" />
                         <span className="text-[10px] font-mono tracking-widest text-slate-300 uppercase font-semibold">
@@ -531,7 +617,7 @@ export function PresentationLightroomModal({
             </div>
           </div>
         ) : (
-          /* STANDARD NORMAL ORIENTATION (0° / 180°) */
+          /* STANDARD NORMAL ORIENTATION (0°) */
           <div
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -539,9 +625,7 @@ export function PresentationLightroomModal({
             onClick={handleSlideTap}
             style={{
               transform: isZoomed
-                ? `scale(1.6) rotate(${rotation}deg)`
-                : rotation !== 0
-                ? `rotate(${rotation}deg)`
+                ? `scale(1.8)`
                 : touchOffset !== 0
                 ? `translateX(${touchOffset}px)`
                 : undefined,
@@ -554,17 +638,10 @@ export function PresentationLightroomModal({
           >
             {!isSlideLoaded && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 bg-slate-950/70 backdrop-blur-md select-none overflow-hidden min-w-[280px] min-h-[180px]">
-                {/* Subtle ambient light sweep across the background */}
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_50%,rgba(56,189,248,0.08),transparent_70%)] pointer-events-none" />
-
-                {/* Personalized Crewvia Studio Plaque with Shining Border */}
                 <div className="relative p-[1.5px] rounded-2xl overflow-hidden shadow-2xl shadow-cyan-950/40">
-                  {/* Animated Shining Border (Luminous border light flow around the card) */}
                   <div className="absolute inset-0 bg-[linear-gradient(115deg,transparent_20%,rgba(56,189,248,0.7)_50%,transparent_80%)] bg-[length:200%_100%] animate-shimmer pointer-events-none" />
-
-                  {/* Inner Branded Glass Badge */}
                   <div className="relative px-5 py-3.5 rounded-[15px] bg-slate-950/90 backdrop-blur-xl flex flex-col items-center justify-center gap-2 border border-white/10">
-                    {/* Crewvia Logo with subtle breathing aura */}
                     <div className="flex items-center gap-2.5">
                       <img
                         src="/logo.png"
@@ -578,8 +655,6 @@ export function PresentationLightroomModal({
                         </span>
                       </span>
                     </div>
-
-                    {/* Personalized Slide Position Tracker */}
                     <div className="flex items-center gap-2 pt-1 border-t border-white/10 w-full justify-center">
                       <span className="size-1.5 rounded-full bg-cyan-400 animate-pulse" />
                       <span className="text-[10px] font-mono tracking-widest text-slate-300 uppercase font-semibold">
@@ -678,11 +753,11 @@ export function PresentationLightroomModal({
         </div>
       )}
 
-      {/* FLOATING ISLAND CONTROL DOCK (BOTTOM CENTER) - Matches User Reference Image 2 */}
+      {/* FLOATING ISLAND CONTROL DOCK (BOTTOM CENTER) - Ultra-responsive on all screen widths */}
       <nav
         aria-label="Presentation Controls Dock"
-        className={`pointer-events-auto z-30 flex items-center gap-1 sm:gap-2 rounded-full bg-white/95 backdrop-blur-2xl border border-black/10 shadow-2xl shadow-black/15 text-neutral-900 max-w-[96vw] shrink-0 mb-[env(safe-area-inset-bottom,0px)] ${
-          isNativeLandscape ? "p-1 scale-90" : "p-1.5 sm:p-2"
+        className={`pointer-events-auto z-30 flex items-center gap-1 sm:gap-1.5 md:gap-2 rounded-full bg-white/95 backdrop-blur-2xl border border-black/10 shadow-2xl shadow-black/15 text-neutral-900 max-w-[98vw] shrink-0 mb-[max(env(safe-area-inset-bottom),10px)] transition-all ${
+          isNativeLandscape ? "p-1 scale-90" : "px-2 py-1.5 sm:px-3 sm:py-2"
         }`}
       >
         {/* Share Button (Native Mobile Share Sheet or Clipboard Copy) */}
@@ -707,17 +782,21 @@ export function PresentationLightroomModal({
           <Download className="size-3.5 sm:size-4" />
         </button>
 
-        {/* Rotate Angle Button in Dock (Quick Mobile Horizontal Toggle) */}
+        {/* Rotate / Landscape Orientation Toggle Button */}
         <button
-          onClick={handleRotateClockwise}
-          title="Rotate 90° for Horizontal View"
+          onClick={handleToggleOrientation}
+          title={
+            rotation === 90
+              ? "Return to Portrait View"
+              : "Expand to Landscape Widescreen View"
+          }
           className={`size-7.5 sm:size-9 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0 ${
-            rotation !== 0
-              ? "bg-neutral-950 text-white font-bold"
+            rotation === 90
+              ? "bg-neutral-950 text-white font-bold ring-2 ring-primary/40 shadow-sm"
               : "hover:bg-neutral-100 text-neutral-700 hover:text-black"
           }`}
         >
-          <RotateCw className="size-3.5 sm:size-4" />
+          <RotateCw className={`size-3.5 sm:size-4 transition-transform duration-300 ${rotation === 90 ? "rotate-90 text-cyan-300" : ""}`} />
         </button>
 
         {/* Fullscreen Toggle Button (Desktop & Tablet) */}
@@ -753,7 +832,7 @@ export function PresentationLightroomModal({
           onEdit && (
             <button
               onClick={onEdit}
-              className="h-7.5 sm:h-9 px-3 sm:px-5 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold tracking-wide shadow-md flex items-center gap-1.5 active:scale-95 transition-all whitespace-nowrap"
+              className="h-7.5 sm:h-9 px-3 sm:px-4 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold tracking-wide shadow-md flex items-center gap-1.5 active:scale-95 transition-all whitespace-nowrap shrink-0"
             >
               <Edit2 className="size-3 sm:size-3.5" />
               <span>Edit</span>
@@ -763,34 +842,35 @@ export function PresentationLightroomModal({
           onBook && (
             <button
               onClick={onBook}
-              className="h-7.5 sm:h-9 px-3.5 sm:px-5 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white text-xs sm:text-sm font-semibold tracking-wide shadow-md flex items-center gap-1.5 active:scale-95 transition-all whitespace-nowrap"
+              className="h-7.5 sm:h-9 px-2.5 sm:px-4.5 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white text-xs sm:text-sm font-semibold tracking-wide shadow-md flex items-center gap-1 active:scale-95 transition-all whitespace-nowrap shrink-0"
             >
-              <span>Book a call</span>
+              <span className="hidden xs:inline">Book a call</span>
+              <span className="xs:hidden inline">Book</span>
               <ArrowUpRight className="size-3 sm:size-3.5" />
             </button>
           )
         )}
 
         {/* Slide Navigation Segment: [ < ]  1 / N  [ > ] */}
-        <div className="flex items-center gap-0.5 sm:gap-1 px-1 py-0.5 rounded-full bg-neutral-100/90 border border-neutral-200/80">
+        <div className="flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-neutral-100/90 border border-neutral-200/80 shrink-0">
           <button
             onClick={handlePrev}
-            title="Previous Slide (Swipe Right)"
-            className="size-6.5 sm:size-8 rounded-full hover:bg-neutral-200/80 text-neutral-800 flex items-center justify-center transition-all active:scale-90 shrink-0"
+            title="Previous Slide"
+            className="size-6 sm:size-7.5 rounded-full hover:bg-neutral-200/80 text-neutral-800 flex items-center justify-center transition-all active:scale-90 shrink-0"
           >
-            <ChevronLeft className="size-3 sm:size-4" />
+            <ChevronLeft className="size-3 sm:size-3.5" />
           </button>
 
-          <span className="text-[10px] sm:text-xs font-mono font-bold px-1 sm:px-2 text-neutral-800 whitespace-nowrap min-w-[30px] sm:min-w-[42px] text-center">
+          <span className="text-[10px] sm:text-xs font-mono font-bold px-1 sm:px-1.5 text-neutral-800 whitespace-nowrap min-w-[28px] sm:min-w-[38px] text-center">
             {activeSlideIndex + 1} / {totalSlides}
           </span>
 
           <button
             onClick={handleNext}
-            title="Next Slide (Swipe Left)"
-            className="size-6.5 sm:size-8 rounded-full hover:bg-neutral-200/80 text-neutral-800 flex items-center justify-center transition-all active:scale-90 shrink-0"
+            title="Next Slide"
+            className="size-6 sm:size-7.5 rounded-full hover:bg-neutral-200/80 text-neutral-800 flex items-center justify-center transition-all active:scale-90 shrink-0"
           >
-            <ChevronRight className="size-3 sm:size-4" />
+            <ChevronRight className="size-3 sm:size-3.5" />
           </button>
         </div>
       </nav>

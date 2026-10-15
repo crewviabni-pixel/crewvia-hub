@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Share2,
   Calendar,
@@ -14,14 +14,22 @@ import {
   ChevronDown,
   Layers,
   Compass,
+  Copy,
+  Heart,
+  Eye,
 } from "lucide-react";
 import {
   fetchPublishedPortfolioItems,
   incrementPortfolioViews,
+  togglePortfolioLike,
+  getClientLikedDeckIds,
+  formatCompactNumber,
+  subscribeToPortfolioSync,
   type PortfolioItem,
 } from "@/lib/portfolio-api";
 import { PORTFOLIO_CATEGORIES } from "@/lib/portfolio-sample-decks";
 import { PresentationLightroomModal } from "@/components/PresentationLightroomModal";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -64,13 +72,9 @@ type CategoryType = (typeof CATEGORIES)[number];
 
 const CREWVIA_TEAM_WHATSAPP = "917223804653";
 
-// Default Desktop Tile Geometry fallback constants
-// const DEFAULT_CARD_WIDTH = 460;
-// const DEFAULT_CARD_HEIGHT = 280;
-
-// Selected Standard Light Skeleton Geometry & Constants
-const DEFAULT_CARD_WIDTH = 460;
-const DEFAULT_CARD_HEIGHT = 280;
+// Standard 16:9 Widescreen Presentation Card Geometry (Ensures 0% of slide is cropped)
+const DEFAULT_CARD_WIDTH = 464;
+const DEFAULT_CARD_HEIGHT = 261;
 
 const SKELETON_PLACEHOLDER_DECKS: PortfolioItem[] = [
   {
@@ -179,7 +183,8 @@ const SKELETON_PLACEHOLDER_DECKS: PortfolioItem[] = [
 
 function PublicPortfolioShowcasePage() {
   const search = Route.useSearch();
-  const navigate = useNavigate();
+  const navigate = useNavigate({ from: "/portfolio" });
+  const queryClient = useQueryClient();
 
   // Viewport tracking for responsive virtual tiling
   const [viewport, setViewport] = useState({
@@ -195,7 +200,7 @@ function PublicPortfolioShowcasePage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Responsive Card & Grid Dimensions
+  // Responsive Card & Grid Dimensions (Strict 16:9 widescreen presentation proportion)
   const isMobile = viewport.w < 640;
   const isTablet = viewport.w >= 640 && viewport.w < 1024;
   const cardWidth = isMobile
@@ -203,7 +208,7 @@ function PublicPortfolioShowcasePage() {
     : isTablet
     ? 390
     : DEFAULT_CARD_WIDTH;
-  const cardHeight = Math.round(cardWidth * (DEFAULT_CARD_HEIGHT / DEFAULT_CARD_WIDTH));
+  const cardHeight = Math.round((cardWidth * 9) / 16);
   const gapX = isMobile ? 16 : isTablet ? 28 : 36;
   const gapY = isMobile ? 16 : isTablet ? 28 : 36;
   const cellW = cardWidth + gapX;
@@ -267,8 +272,8 @@ function PublicPortfolioShowcasePage() {
   // Link copy feedback
   const [copiedDeckId, setCopiedDeckId] = useState<string | null>(null);
 
-  // Fog-of-War Discovery State: revealed on hover and persists for session
-  const [discoveredIds, setDiscoveredIds] = useState<Set<string>>(new Set());
+  // Fog-of-War Seen State: revealed on hover and persists for session
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
 
   // Infinite Freehand Canvas State & Direct GPU Hardware Layer Ref
   const containerRef = useRef<HTMLDivElement>(null);
@@ -318,6 +323,14 @@ function PublicPortfolioShowcasePage() {
     staleTime: 20 * 1000,
   });
 
+  // Real-time cross-tab synchronization: keep public showcase updated when manager adds/edits decks
+  useEffect(() => {
+    const unsubscribe = subscribeToPortfolioSync(() => {
+      queryClient.invalidateQueries({ queryKey: ["published-portfolio-showcase"] });
+    });
+    return unsubscribe;
+  }, [queryClient]);
+
   // Handle direct deep-link parameter ?deck=<id>
   useEffect(() => {
     if (search.deck && portfolioItems.length > 0) {
@@ -326,7 +339,7 @@ function PublicPortfolioShowcasePage() {
         setActiveDeck(found);
         setActiveSlideIndex(0);
         incrementPortfolioViews(found.id);
-        setDiscoveredIds((prev) => new Set(prev).add(found.id));
+        setSeenIds((prev) => new Set(prev).add(found.id));
       }
     }
   }, [search.deck, portfolioItems]);
@@ -346,28 +359,57 @@ function PublicPortfolioShowcasePage() {
     );
   }, [portfolioItems, activeCategory, isLoading]);
 
-  const openDeckModal = useCallback((deck: PortfolioItem, initialSlideIndex = 0) => {
-    setActiveDeck(deck);
-    setActiveSlideIndex(initialSlideIndex);
-    incrementPortfolioViews(deck.id);
-    setDiscoveredIds((prev) => new Set(prev).add(deck.id));
+  const openDeckModal = useCallback(
+    (deck: PortfolioItem, initialSlideIndex = 0) => {
+      // 1. FIRST PRIORITY: Instantly open preview modal on the current frame (0ms latency)
+      const optimisticDeck = {
+        ...deck,
+        view_count: (deck.view_count || 0) + 1,
+      };
+      setActiveDeck(optimisticDeck);
+      setActiveSlideIndex(initialSlideIndex);
+      setSeenIds((prev) => new Set(prev).add(deck.id));
 
-    navigate({
-      search: (prev) => ({ ...prev, deck: deck.id }),
-      replace: true,
-    });
-  }, [navigate]);
+      // 2. Non-blocking URL parameter sync
+      try {
+        navigate({
+          search: (prev: any) => ({ ...prev, deck: deck.id }),
+          replace: true,
+        });
+      } catch {}
+
+      // 3. Background asynchronous API persistence (runs in background without blocking modal)
+      setTimeout(() => {
+        incrementPortfolioViews(deck.id).catch(() => {});
+        queryClient.setQueryData(
+          ["published-portfolio-showcase"],
+          (old: PortfolioItem[] | undefined) => {
+            if (!old) return old;
+            return old.map((item) =>
+              item.id === deck.id
+                ? { ...item, view_count: (item.view_count || 0) + 1 }
+                : item
+            );
+          }
+        );
+      }, 0);
+    },
+    [navigate, queryClient]
+  );
 
   const closeDeckModal = useCallback(() => {
     setActiveDeck(null);
     navigate({
-      search: (prev) => ({ ...prev, deck: undefined }),
+      search: (prev: any) => {
+        const { deck, ...rest } = prev || {};
+        return rest;
+      },
       replace: true,
     });
   }, [navigate]);
 
-  const handleDiscover = useCallback((deckId: string) => {
-    setDiscoveredIds((prev) => {
+  const handleSeen = useCallback((deckId: string) => {
+    setSeenIds((prev) => {
       if (prev.has(deckId)) return prev;
       const next = new Set(prev);
       next.add(deckId);
@@ -433,10 +475,15 @@ function PublicPortfolioShowcasePage() {
   const handleCategorySelect = (category: CategoryType) => {
     setActiveCategory(category);
     navigate({
-      search: (prev) => ({
-        ...prev,
-        cat: category === "All" ? undefined : category.toLowerCase().replace(/\s+/g, "-"),
-      }),
+      search: (prev: any) => {
+        const next = { ...prev };
+        if (category === "All") {
+          delete next.cat;
+        } else {
+          next.cat = category.toLowerCase().replace(/\s+/g, "-");
+        }
+        return next;
+      },
       replace: true,
     });
   };
@@ -686,6 +733,7 @@ function PublicPortfolioShowcasePage() {
         const positiveMod = (n: number, m: number) => ((n % m) + m) % m;
         const itemIdx = positiveMod(r * 3 + c, total);
         const deck = filteredItems[itemIdx];
+        if (!deck) continue;
 
         // Alternating row offset for elegant staggered layout
         const rowShift = r % 2 !== 0 ? cellW / 2 : 0;
@@ -706,7 +754,7 @@ function PublicPortfolioShowcasePage() {
   }, [gridOrigin.x, gridOrigin.y, viewport.w, viewport.h, filteredItems, cellW, cellH]);
 
   const totalWorks = portfolioItems.length;
-  const discoveredCount = discoveredIds.size;
+  const seenCount = seenIds.size;
 
   return (
     <div
@@ -734,7 +782,7 @@ function PublicPortfolioShowcasePage() {
           </Link>
         </div>
 
-        {/* Center: Discovery Explorer Counter Pill (Exempt from strict height rule as requested) */}
+        {/* Center: Seen Explorer Counter Pill */}
         <div className="pointer-events-auto hidden md:flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/85 backdrop-blur-2xl border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-lg shadow-slate-900/5 select-none">
           {isLoading ? (
             <>
@@ -750,7 +798,7 @@ function PublicPortfolioShowcasePage() {
             <>
               <span className="size-2 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-400 shrink-0" />
               <span>
-                Discovered <span className="text-slate-950 font-bold">{discoveredCount}</span> of{" "}
+                Seen <span className="text-slate-950 font-bold">{seenCount}</span> of{" "}
                 {totalWorks} Works
               </span>
               <span className="text-slate-300">•</span>
@@ -758,9 +806,9 @@ function PublicPortfolioShowcasePage() {
                 <Compass className="size-3 text-primary" />
                 Drag canvas to explore
               </span>
-              {discoveredCount >= totalWorks && totalWorks > 0 && (
+              {seenCount >= totalWorks && totalWorks > 0 && (
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 text-[10px] font-mono font-bold">
-                  All Unlocked!
+                  All Seen!
                 </span>
               )}
             </>
@@ -820,8 +868,8 @@ function PublicPortfolioShowcasePage() {
               >
                 <InfinitePresentationCard
                   deck={tile.deck}
-                  isDiscovered={isMobile || discoveredIds.has(tile.deck.id)}
-                  onDiscover={handleDiscover}
+                  isSeen={isMobile || seenIds.has(tile.deck.id)}
+                  onSeen={handleSeen}
                   onOpen={openDeckModal}
                   onShare={handleShareDeck}
                   onBook={handleOpenBooking}
@@ -1089,8 +1137,8 @@ function PublicPortfolioShowcasePage() {
 // INFINITE PRESENTATION CARD: MEMOIZED FOR 120 FPS FLUIDITY
 const InfinitePresentationCard = memo(function InfinitePresentationCard({
   deck,
-  isDiscovered,
-  onDiscover,
+  isSeen,
+  onSeen,
   onOpen,
   onShare,
   onBook,
@@ -1098,8 +1146,8 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
   dragDistanceRef,
 }: {
   deck: PortfolioItem;
-  isDiscovered: boolean;
-  onDiscover: (id: string) => void;
+  isSeen: boolean;
+  onSeen: (id: string) => void;
   onOpen: (deck: PortfolioItem, initialSlide: number) => void;
   onShare: (deck: PortfolioItem, e?: React.MouseEvent) => void;
   onBook: (deck?: PortfolioItem | null, e?: React.MouseEvent) => void;
@@ -1108,13 +1156,22 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
 }) {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+  const autoScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const slides = deck.slides && deck.slides.length > 0 ? deck.slides : [];
-  const totalSlides = slides.length || deck.slide_count || 1;
+  // Normalize display slides (ensures cover or slide list is always populated)
+  const displaySlides = useMemo(() => {
+    if (deck.slides && deck.slides.length > 0) {
+      return deck.slides;
+    }
+    if (deck.cover_image_url) {
+      return [{ id: "cover", slide_number: 1, preview_url: deck.cover_image_url }];
+    }
+    return [];
+  }, [deck.slides, deck.cover_image_url]);
 
-  const currentSlideUrl =
-    slides[currentSlideIndex]?.preview_url || deck.cover_image_url;
+  const totalSlides = displaySlides.length || deck.slide_count || 1;
 
   useEffect(() => {
     if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
@@ -1122,10 +1179,66 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
     } else {
       setIsImageLoaded(false);
     }
-  }, [currentSlideUrl]);
+  }, [displaySlides]);
 
-  const isSkeleton = deck.id.startsWith("skel-") || !currentSlideUrl;
-  const showRealContent = !isSkeleton && isImageLoaded;
+  // Preload all slides in background for instant smooth sliding without flicker
+  useEffect(() => {
+    if (displaySlides && displaySlides.length > 1) {
+      displaySlides.forEach((s) => {
+        if (s.preview_url) {
+          const img = new Image();
+          img.src = s.preview_url;
+        }
+      });
+    }
+  }, [displaySlides]);
+
+  // 1.5-second (1500ms) automatic slide scrubber on hover with smooth sliding animation
+  useEffect(() => {
+    if (isHovered && totalSlides > 1) {
+      autoScrollTimerRef.current = setInterval(() => {
+        setCurrentSlideIndex((prev) => (prev + 1) % totalSlides);
+      }, 1500);
+    } else {
+      if (autoScrollTimerRef.current) {
+        clearInterval(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (autoScrollTimerRef.current) {
+        clearInterval(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = null;
+      }
+    };
+  }, [isHovered, totalSlides]);
+
+  // View count state with optimistic live increment
+  const [viewCount, setViewCount] = useState(deck.view_count || 0);
+
+  useEffect(() => {
+    setViewCount(deck.view_count || 0);
+  }, [deck.view_count]);
+
+  // Client likes state with optimistic updates & local tracking
+  const [isLiked, setIsLiked] = useState(() => getClientLikedDeckIds().has(deck.id));
+  const [likeCount, setLikeCount] = useState(deck.like_count || 0);
+
+  useEffect(() => {
+    setLikeCount(deck.like_count || 0);
+  }, [deck.like_count]);
+
+  const handleLikeToggle = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextLiked = !isLiked;
+    setIsLiked(nextLiked);
+    setLikeCount((prev) => Math.max(0, prev + (nextLiked ? 1 : -1)));
+    await togglePortfolioLike(deck.id, nextLiked);
+  };
+
+  const isSkeleton = deck.id.startsWith("skel-") || displaySlides.length === 0;
+  const showRealContent = !isSkeleton;
 
   const handlePrevSlide = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1137,9 +1250,12 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
     setCurrentSlideIndex((prev) => (prev < totalSlides - 1 ? prev + 1 : 0));
   };
 
-  const handleCardClick = () => {
+  // Card Tap / Click: Open the preview modal INSTANTLY (0ms latency)
+  const handleCardClick = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (isSkeleton) return;
     if (!dragDistanceRef.current || dragDistanceRef.current < 6) {
+      setViewCount((prev) => prev + 1);
       onOpen(deck, currentSlideIndex);
     }
   };
@@ -1147,7 +1263,12 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
   return (
     <div
       onMouseEnter={() => {
-        if (!isDiscovered && !isSkeleton) onDiscover(deck.id);
+        setIsHovered(true);
+        if (!isSeen && !isSkeleton) onSeen(deck.id);
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        setCurrentSlideIndex(0);
       }}
       onClick={handleCardClick}
       style={{
@@ -1155,97 +1276,75 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
         WebkitMaskImage: "-webkit-radial-gradient(white, black)",
         maskImage: "radial-gradient(white, black)",
       }}
-      className={`group relative size-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg shadow-slate-900/[0.04] border border-slate-200/90 bg-white transition-all duration-200 select-none ${
+      className={`group relative size-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg shadow-slate-900/[0.04] border border-slate-200/90 bg-slate-950 transition-all duration-200 select-none ${
         isSkeleton
           ? "cursor-default"
           : "cursor-pointer hover:border-slate-400/60 hover:shadow-xl hover:shadow-slate-900/10"
       }`}
     >
-      {/* 1. LAYER 0: SELECTED STANDARD LIGHT SKELETON CANVAS */}
-      {/* Uniform, clean, light, and fully responsive across mobile, tablet, and desktop */}
-      <div
-        className="absolute inset-0 size-full rounded-2xl sm:rounded-3xl bg-gradient-to-br from-slate-50 via-white to-slate-100/90 p-3.5 sm:p-5 md:p-6 flex flex-col justify-between overflow-hidden select-none pointer-events-none transition-all duration-500"
-      >
-        {/* Soft Radial Ambient Aura Glow */}
-        <div className="absolute -top-12 -right-12 size-48 sm:size-64 rounded-full pointer-events-none blur-3xl opacity-40 bg-sky-200/40" />
-        <div className="absolute -bottom-12 -left-12 size-48 sm:size-64 rounded-full pointer-events-none blur-3xl opacity-30 bg-indigo-100/50" />
+      {/* 1. LAYER 0: SKELETON CANVAS (ONLY for skeleton decks while data is loading) */}
+      {isSkeleton && (
+        <div className="absolute inset-0 size-full rounded-2xl sm:rounded-3xl bg-gradient-to-br from-slate-50 via-white to-slate-100/90 flex flex-col items-center justify-center p-4 sm:p-6 text-center select-none pointer-events-none transition-all duration-300 overflow-hidden z-0">
+          {/* Ambient Subtle Shimmer (Clean light flow) */}
+          <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_25%,rgba(255,255,255,0.85)_50%,transparent_75%)] bg-[length:200%_100%] animate-shimmer pointer-events-none" />
 
-        {/* Ambient Subtle Shimmer (Clean Light Flow) */}
-        <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_25%,rgba(255,255,255,0.85)_50%,transparent_75%)] bg-[length:200%_100%] animate-shimmer pointer-events-none" />
-
-        {/* Top Eyebrow / Slide Header Wireframe */}
-        <div className="relative z-0 flex items-center justify-between w-full">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <div className="h-3 sm:h-3.5 w-14 sm:w-20 rounded-full bg-slate-200/90 animate-pulse" />
-            <div className="h-2.5 sm:h-3 w-16 sm:w-24 rounded-full bg-slate-200/60 hidden xs:block sm:block" />
+          {/* Clean Center Plaque / Watermark */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/[0.04] border border-slate-300/50 text-slate-700 text-[11px] font-medium tracking-wide shadow-xs">
+            <img src="/logo.png" alt="" className="h-3 w-auto object-contain opacity-75 shrink-0" />
+            <span>Curating Visuals...</span>
           </div>
-          <div className="h-3 sm:h-3.5 w-10 sm:w-14 rounded-full bg-slate-200/70" />
+          <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400 font-semibold mt-1.5">
+            {deck.category || "Visual"}
+          </span>
         </div>
+      )}
 
-        {/* Center Presentation Graphic Composition (Fluid & Responsive without fixed vertical overflow) */}
-        <div className="relative z-0 my-auto w-full grid grid-cols-12 gap-2.5 sm:gap-4 items-center">
-          {/* Main Visual Slide Hero Card */}
-          <div className="col-span-7 space-y-1.5 sm:space-y-2.5">
-            <div className="h-3.5 sm:h-5 w-4/5 rounded-md sm:rounded-lg bg-slate-300/80" />
-            <div className="h-2 sm:h-3 w-3/5 rounded bg-slate-200/80" />
-            <div className="h-2 sm:h-3 w-2/3 rounded bg-slate-200/60" />
-            <div className="pt-1 sm:pt-2 flex items-center gap-1.5 sm:gap-2">
-              <div className="h-3.5 sm:h-5 w-12 sm:w-16 rounded-full bg-slate-200/80" />
-              <div className="h-3.5 sm:h-5 w-14 sm:w-20 rounded-full bg-slate-200/70" />
-            </div>
-          </div>
-
-          {/* Right Geometric Diagram / Mockup Card */}
-          <div className="col-span-5 h-16 sm:h-22 md:h-24 rounded-lg sm:rounded-xl bg-slate-100/90 border border-slate-200/80 p-2 sm:p-2.5 flex flex-col justify-between shadow-xs">
-            <div className="flex items-center justify-between">
-              <div className="size-2 sm:size-2.5 rounded-full bg-slate-300/80" />
-              <div className="h-1.5 sm:h-2 w-6 sm:w-8 rounded-full bg-slate-200" />
-            </div>
-            <div className="space-y-1 sm:space-y-1.5">
-              <div className="h-1.5 sm:h-2 w-full rounded bg-slate-200/80" />
-              <div className="h-1.5 sm:h-2 w-3/4 rounded bg-slate-200/70" />
-            </div>
-            <div className="h-3.5 sm:h-4.5 w-full rounded-md bg-slate-200/60 flex items-center justify-center">
-              <div className="h-1.5 w-8 sm:w-12 rounded-full bg-slate-300/70" />
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Slide Footer Line */}
-        <div className="relative z-0 flex items-center justify-between w-full pt-1.5 sm:pt-2 border-t border-slate-200/70">
-          <div className="h-2 sm:h-2.5 w-16 sm:w-22 rounded-full bg-slate-200/80" />
-          <div className="h-2 sm:h-2.5 w-12 sm:w-16 rounded-full bg-slate-200/70" />
-        </div>
-      </div>
-
-      {/* 2. LAYER 1: HIGH-RESOLUTION PRESENTATION SLIDE COVER IMAGE */}
-      {/* Smoothly cross-fades over the light skeleton canvas with 600ms ease-out */}
-      {currentSlideUrl ? (
-        <img
-          ref={imgRef}
-          src={currentSlideUrl}
-          alt={deck.title}
-          decoding="async"
-          draggable={false}
-          onLoad={() => setIsImageLoaded(true)}
-          onError={() => setIsImageLoaded(true)}
-          className={`absolute inset-0 size-full rounded-2xl sm:rounded-3xl object-cover transform-gpu pointer-events-none transition-all duration-600 ease-out ${
-            isImageLoaded ? "opacity-100" : "opacity-0"
-          } ${
-            !isDiscovered
-              ? "blur-lg scale-105 brightness-95"
-              : "blur-0 brightness-100 group-hover:blur-md group-hover:scale-105 group-hover:brightness-[0.45]"
+      {/* 2. LAYER 1: HIGH-RESOLUTION SLIDES IN SMOOTH SLIDING HORIZONTAL TRACK */}
+      {/* Fitted without cropping (object-contain in 16:9 frame) and smoothly animates across slides */}
+      {displaySlides.length > 0 && showRealContent ? (
+        <div
+          className={`absolute inset-0 size-full rounded-2xl sm:rounded-3xl bg-slate-950 overflow-hidden transform-gpu pointer-events-none transition-all duration-300 z-0 ${
+            !isSeen ? "blur-lg scale-105 brightness-95" : "blur-0 brightness-100"
           }`}
-          loading="lazy"
-        />
+        >
+          <div
+            className="flex size-full transition-transform duration-700 ease-out will-change-transform"
+            style={{
+              transform: `translate3d(-${currentSlideIndex * 100}%, 0, 0)`,
+            }}
+          >
+            {displaySlides.map((slide, idx) => (
+              <div
+                key={slide.id || idx}
+                className="size-full shrink-0 flex items-center justify-center bg-slate-950 overflow-hidden"
+              >
+                <img
+                  ref={idx === 0 ? imgRef : undefined}
+                  src={slide.preview_url}
+                  alt={`${deck.title} slide ${idx + 1}`}
+                  decoding="async"
+                  draggable={false}
+                  onLoad={() => {
+                    if (idx === 0) setIsImageLoaded(true);
+                  }}
+                  onError={() => {
+                    if (idx === 0) setIsImageLoaded(true);
+                  }}
+                  className="size-full object-contain pointer-events-none select-none"
+                  loading={idx === 0 ? "eager" : "lazy"}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       ) : null}
 
-      {/* 3. LAYER 2: UNDISCOVERED FROSTED GLASS & CENTER WATERMARK */}
-      {!isSkeleton && !isDiscovered && (
+      {/* 3. LAYER 2: UNSEEN FROSTED GLASS & CENTER WATERMARK */}
+      {!isSkeleton && !isSeen && (
         <div className="absolute inset-0 size-full rounded-2xl sm:rounded-3xl bg-white/60 backdrop-blur-[3px] flex flex-col items-center justify-center p-4 sm:p-6 text-center select-none transition-all duration-300 pointer-events-none z-10">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/[0.04] border border-slate-300/50 text-slate-700 text-[11px] font-medium tracking-wide shadow-xs">
             <img src="/logo.png" alt="" className="h-3 w-auto object-contain opacity-75 shrink-0" />
-            <span>Hover to discover</span>
+            <span>Hover to see</span>
           </div>
           <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500 font-semibold mt-1.5">
             {deck.category || "Visual"}
@@ -1253,150 +1352,108 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
         </div>
       )}
 
-      {/* STATE 2: DISCOVERED OVERLAY (Visible when resting over loaded presentation image) */}
-      {showRealContent && isDiscovered && (
-        <div className="absolute inset-0 size-full rounded-2xl sm:rounded-3xl flex flex-col justify-between p-3.5 sm:p-5 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent group-hover:opacity-0 transition-opacity duration-300 pointer-events-none z-10">
-          {/* Top Row: Slide Counter Only */}
-          <div className="flex items-center justify-end">
-            <div className="px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-black/60 border border-white/15 text-[9px] sm:text-[10px] font-mono tracking-wider text-white">
-              {currentSlideIndex + 1} / {totalSlides}
-            </div>
-          </div>
+      {/* Top-Right Slide Progress Pill (Syncs with 1.5s auto-scroll) */}
+      {showRealContent && totalSlides > 1 && (
+        <div
+          className="absolute top-3.5 right-3.5 z-20 flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-950/70 backdrop-blur-md border border-white/20 text-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={handlePrevSlide}
+            title="Previous slide"
+            className="size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90"
+          >
+            <ChevronLeft className="size-3" />
+          </button>
+          <span className="text-[10px] font-mono font-medium px-1 tracking-wider text-slate-100">
+            {currentSlideIndex + 1} / {totalSlides}
+          </span>
+          <button
+            onClick={handleNextSlide}
+            title="Next slide"
+            className="size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90"
+          >
+            <ChevronRight className="size-3" />
+          </button>
+        </div>
+      )}
 
-          {/* Bottom Bar: Title & Client Info (Left) + Discovered Badge (Right) */}
-          <div className="flex items-end justify-between gap-2 sm:gap-3">
-            <div className="flex-1 min-w-0">
-              <span className="text-[9px] sm:text-[10px] uppercase font-mono font-bold tracking-wider text-cyan-400">
-                {deck.category}
-              </span>
-              <h3 className="text-sm sm:text-base md:text-lg font-bold text-white tracking-tight line-clamp-1 mt-0.5 drop-shadow-md">
-                {deck.title}
-              </h3>
-              <p className="text-[11px] sm:text-xs text-white/80 line-clamp-1 mt-0.5 drop-shadow">
-                {deck.client_name || "Client Presentation"}
-              </p>
-            </div>
-
-            {/* Discovered Badge */}
-            <div className="shrink-0 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[9px] sm:text-[10px] font-mono font-semibold text-emerald-300 flex items-center gap-1 sm:gap-1.5 shadow-md">
-              <Check className="size-2.5 sm:size-3 text-emerald-400" />
-              <span>Discovered</span>
-            </div>
+      {/* STATE 2: SEEN OVERLAY (Clean resting state with title & category) */}
+      {showRealContent && isSeen && (
+        <div className="absolute inset-0 size-full rounded-2xl sm:rounded-3xl flex flex-col justify-end p-3.5 sm:p-5 bg-gradient-to-t from-slate-950/80 via-slate-950/15 to-transparent group-hover:opacity-0 transition-opacity duration-300 pointer-events-none z-10">
+          <div className="w-full min-w-0">
+            <span className="text-[9px] sm:text-[10px] uppercase font-mono font-bold tracking-wider text-cyan-400">
+              {deck.category}
+            </span>
+            <h3 className="text-sm sm:text-base md:text-lg font-bold text-white tracking-tight line-clamp-1 mt-0.5 drop-shadow-md">
+              {deck.title}
+            </h3>
           </div>
         </div>
       )}
 
-      {/* STATE 3: DISCOVERED HOVER OVERLAY - MODERN LUXURY STUDIO DESIGN */}
-      {showRealContent && isDiscovered && (
-        <div className="absolute inset-0 size-full rounded-2xl sm:rounded-3xl bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-slate-950/60 p-3.5 sm:p-5 md:p-6 flex flex-col justify-between text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto z-20">
-          {/* Top Row: Category badge & Unified Sleek Slide Flipper */}
-          <div className="flex items-center justify-between">
-            <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-white/15 text-[10px] sm:text-[11px] font-semibold text-white border border-white/20 tracking-wide shadow-sm flex items-center gap-1 sm:gap-1.5">
-              <span className="size-1.5 rounded-full bg-cyan-400 animate-pulse" />
-              {deck.category}
-            </span>
+      {/* STATE 3: DARK FADE BOTTOM DOCK ON HOVER (NO WHITE BLUR, 4 DATA POINTS ONLY) */}
+      {showRealContent && isSeen && (
+        <div
+          className="absolute bottom-0 inset-x-0 z-20 pt-12 pb-3 px-3 sm:px-4 bg-gradient-to-t from-slate-950/95 via-slate-950/65 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Left Group: Copy link, Views count, Likes count */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* 1. Copy Link Icon Button */}
+            <button
+              onClick={(e) => onShare(deck, e)}
+              title={isCopied ? "Link copied!" : "Copy presentation link"}
+              className="size-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-sm"
+            >
+              {isCopied ? (
+                <Check className="size-3.5 text-emerald-400" />
+              ) : (
+                <Copy className="size-3.5 text-white/90" />
+              )}
+            </button>
 
-            {/* Quick in-card slide navigator pill */}
-            {totalSlides > 1 ? (
-              <div
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/60 border border-white/20 text-white shadow-sm"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  onClick={handlePrevSlide}
-                  title="Previous slide"
-                  className="size-5 sm:size-6 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90"
-                >
-                  <ChevronLeft className="size-3 sm:size-3.5" />
-                </button>
-                <span className="text-[9px] sm:text-[10px] font-mono font-medium px-1 sm:px-1.5 tracking-wider text-slate-200">
-                  {currentSlideIndex + 1} / {totalSlides}
-                </span>
-                <button
-                  onClick={handleNextSlide}
-                  title="Next slide"
-                  className="size-5 sm:size-6 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90"
-                >
-                  <ChevronRight className="size-3 sm:size-3.5" />
-                </button>
-              </div>
-            ) : (
-              <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-black/50 text-[9px] sm:text-[10px] font-mono text-slate-300 border border-white/10 shadow-sm">
-                1 Slide
-              </span>
-            )}
-          </div>
-
-          {/* Center Section: Clean Typography Hero */}
-          <div className="my-auto space-y-1 sm:space-y-1.5">
-            {deck.client_name && (
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="text-[9px] sm:text-[10px] font-mono font-bold tracking-widest uppercase text-cyan-400 px-1.5 sm:px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-500/30">
-                  {deck.client_name}
-                </span>
-                <span className="text-[9px] sm:text-[10px] font-mono text-slate-400">• Presentation</span>
-              </div>
-            )}
-
-            <h3 className="text-base sm:text-lg md:text-xl font-bold text-white tracking-tight leading-snug line-clamp-1 drop-shadow-md">
-              {deck.title}
-            </h3>
-
-            {deck.tagline ? (
-              <p className="text-[11px] sm:text-xs text-slate-300 font-normal line-clamp-1 sm:line-clamp-2 leading-relaxed drop-shadow">
-                {deck.tagline}
-              </p>
-            ) : (
-              <p className="text-[11px] sm:text-xs text-slate-400 font-normal line-clamp-1">
-                Curated high-stakes presentation crafted by Crewvia Studio.
-              </p>
-            )}
-
-            {deck.metrics && deck.metrics.length > 0 && (
-              <div className="pt-0.5 sm:pt-1 flex flex-wrap gap-1 sm:gap-1.5">
-                {deck.metrics.slice(0, 3).map((metric, mIdx) => (
-                  <span
-                    key={mIdx}
-                    className="px-2 sm:px-2.5 py-0.5 rounded-full bg-white/10 text-[9px] sm:text-[10px] font-mono font-medium text-slate-200 border border-white/15 shadow-sm"
-                  >
-                    {metric}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Bottom Row: Actions */}
-          <div
-            className="pt-2 sm:pt-3 border-t border-white/15 flex items-center justify-between gap-1.5 sm:gap-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <button
-                onClick={(e) => onShare(deck, e)}
-                title="Copy direct presentation link"
-                className="size-8 sm:size-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-sm"
-              >
-                {isCopied ? <Check className="size-3 sm:size-3.5 text-emerald-400" /> : <Share2 className="size-3 sm:size-3.5" />}
-              </button>
-
-              <button
-                onClick={(e) => onBook(deck, e)}
-                title="Book presentation consultation"
-                className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white text-[11px] sm:text-xs font-semibold tracking-wide transition-all hover:scale-105 active:scale-95 shadow-sm"
-              >
-                Book Style
-              </button>
+            {/* 2. View Count Pill */}
+            <div
+              title={`${viewCount} total client views`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/10 border border-white/20 text-[11px] font-semibold text-white select-none shadow-md backdrop-blur-sm"
+            >
+              <Eye className="size-3.5 text-cyan-400 shrink-0" />
+              <span>{formatCompactNumber(viewCount)}</span>
             </div>
 
+            {/* 3. Like Button & Count Pill */}
             <button
-              onClick={() => onOpen(deck, currentSlideIndex)}
-              className="group/cta inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 font-bold text-[11px] sm:text-xs tracking-wide shadow-xl hover:scale-105 active:scale-95 transition-all"
+              onClick={handleLikeToggle}
+              title={isLiked ? "Unlike presentation" : "Like presentation"}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] font-semibold transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-sm select-none",
+                isLiked
+                  ? "bg-rose-500/25 border-rose-500/50 text-rose-300"
+                  : "bg-white/10 hover:bg-rose-500/15 border-white/20 hover:border-rose-400/40 text-white hover:text-rose-300"
+              )}
             >
-              <span>Review Deck</span>
-              <ArrowUpRight className="size-3 sm:size-3.5 text-slate-700 group-hover/cta:text-slate-950 group-hover/cta:translate-x-0.5 group-hover/cta:-translate-y-0.5 transition-transform" />
+              <Heart
+                className={cn(
+                  "size-3.5 transition-colors shrink-0",
+                  isLiked ? "fill-rose-500 text-rose-500 animate-pulse" : "text-white/80"
+                )}
+              />
+              <span>{formatCompactNumber(likeCount)}</span>
             </button>
           </div>
+
+          {/* Right Group: Circular Open Deck Button with Upward Arrow */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCardClick();
+            }}
+            title="Open presentation deck"
+            className="size-8 sm:size-8.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all shrink-0"
+          >
+            <ArrowUpRight className="size-4 text-slate-950 stroke-[2.5]" />
+          </button>
         </div>
       )}
     </div>
