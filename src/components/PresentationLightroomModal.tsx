@@ -13,8 +13,6 @@ import {
   LayoutGrid,
   ZoomIn,
   ZoomOut,
-  RotateCw,
-  Smartphone,
   Eye,
   Heart,
 } from "lucide-react";
@@ -40,6 +38,33 @@ export interface PresentationLightroomModalProps {
   onEdit?: () => void;
   isCopied?: boolean;
   isAdmin?: boolean;
+}
+
+/**
+ * ScreenRotateIcon
+ * Orientation action icon with a device frame that dynamically
+ * rotates with orbital orientation arrows (clearly conveys screen rotation, never refresh).
+ */
+function ScreenRotateIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {/* Curved rotation track arrows indicating 90° orientation change */}
+      <path d="M21 8.5 A 8.5 8.5 0 0 0 12.5 3.5" />
+      <polyline points="21 4 21 8.5 16.5 8.5" />
+      <path d="M3 15.5 A 8.5 8.5 0 0 0 11.5 20.5" />
+      <polyline points="3 20 3 15.5 7.5 15.5" />
+      {/* Smartphone frame in center */}
+      <rect x="8.5" y="6" width="7" height="12" rx="1.5" />
+    </svg>
+  );
 }
 
 export function PresentationLightroomModal({
@@ -171,6 +196,50 @@ export function PresentationLightroomModal({
   const touchStartYRef = useRef<number | null>(null);
   const touchStartTimeRef = useRef<number>(0);
   const lastTapTimeRef = useRef<number>(0);
+  const lastGyroOrientationRef = useRef<0 | 90>(0);
+  const manualOverrideCooldownRef = useRef<number>(0);
+
+  // Realtime Gyroscope Sensor & Physical Orientation Detection
+  // Automatically detects when the mobile phone is physically turned into landscape or portrait
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleDeviceOrientation = (event: DeviceOrientationEvent) => {
+      // Respect manual user clicks for 3.5 seconds before auto-overriding
+      if (Date.now() < manualOverrideCooldownRef.current) return;
+
+      const { beta, gamma } = event;
+      if (beta === null || gamma === null) return;
+
+      // When the phone is lying flat on a surface (e.g. table), keep current orientation
+      if (Math.abs(beta) < 20 && Math.abs(gamma) < 20) return;
+
+      // Phone physically held sideways in landscape:
+      // (gamma tilts beyond ±48° while beta is relatively horizontal < 48°)
+      if (Math.abs(gamma) > 48 && Math.abs(beta) < 48) {
+        if (lastGyroOrientationRef.current !== 90) {
+          lastGyroOrientationRef.current = 90;
+          setRotation(90);
+        }
+        return;
+      }
+
+      // Phone physically held upright in portrait:
+      // (gamma is centered < 25° and beta is upright > 30°)
+      if (Math.abs(gamma) < 25 && beta > 30) {
+        if (lastGyroOrientationRef.current !== 0) {
+          lastGyroOrientationRef.current = 0;
+          setRotation(0);
+        }
+        return;
+      }
+    };
+
+    window.addEventListener("deviceorientation", handleDeviceOrientation, { passive: true });
+    return () => {
+      window.removeEventListener("deviceorientation", handleDeviceOrientation);
+    };
+  }, []);
 
   // Monitor physical phone screen size, orientation, and browser page zoom level
   useEffect(() => {
@@ -183,6 +252,7 @@ export function PresentationLightroomModal({
       // If user physically turns device into landscape, reset virtual rotation to 0 so it doesn't double-rotate
       if (isLandscape) {
         setRotation(0);
+        lastGyroOrientationRef.current = 0;
       }
 
       // Detect browser page zoom level on desktop (e.g. when user zooms out to 50% or 75%)
@@ -263,9 +333,14 @@ export function PresentationLightroomModal({
   }, [activeSlideIndex, totalSlides, setIndex]);
 
   // Toggle between Normal Portrait View (0°) and Landscape Widescreen Angle View (90°)
-  // Prevents upside-down 180° rotation on any device
+  // Prevents upside-down 180° rotation on any device and respects user manual toggle
   const handleToggleOrientation = useCallback(() => {
-    setRotation((prev) => (prev === 0 ? 90 : 0));
+    manualOverrideCooldownRef.current = Date.now() + 3500;
+    setRotation((prev) => {
+      const next = prev === 0 ? 90 : 0;
+      lastGyroOrientationRef.current = next;
+      return next;
+    });
     try {
       if (navigator.vibrate) navigator.vibrate(12);
     } catch {
@@ -954,7 +1029,7 @@ export function PresentationLightroomModal({
               : "hover:bg-slate-100 text-slate-700 hover:text-black"
           )}
         >
-          <RotateCw
+          <ScreenRotateIcon
             className={cn(
               "transition-transform duration-300",
               isThinMobile ? "size-3.5" : isMobile ? "size-4" : "size-5",
