@@ -124,25 +124,28 @@ export function LeadCard({
         <a
           href={telHref(lead.phone)}
           onClick={() => onCall(lead)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground pointer-events-auto cursor-pointer"
         >
           <Phone className="size-3.5" /> Call
         </a>
         <button
+          type="button"
           onClick={() => onCall(lead)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-secondary"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-secondary pointer-events-auto cursor-pointer"
         >
           <PhoneCall className="size-3.5" /> Log call
         </button>
         <button
+          type="button"
           onClick={() => onRemind(lead)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-secondary"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-secondary pointer-events-auto cursor-pointer"
         >
           <BellRing className="size-3.5" /> Remind
         </button>
         <button
+          type="button"
           onClick={() => onPay(lead)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-secondary"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-secondary pointer-events-auto cursor-pointer"
         >
           <IndianRupee className="size-3.5" /> Payment
         </button>
@@ -153,7 +156,7 @@ export function LeadCard({
             const next = e.target.value as LeadStatus;
             if (next !== lead.status) setStatusTarget(next);
           }}
-          className="ml-auto rounded-lg border border-input bg-background px-2 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-ring"
+          className="ml-auto rounded-lg border border-input bg-background px-2 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-ring pointer-events-auto cursor-pointer"
         >
           {LEAD_STATUSES.map((s) => (
             <option key={s.value} value={s.value}>

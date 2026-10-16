@@ -150,6 +150,33 @@
     font-family: var(--font-display);
     letter-spacing: -0.015em;
   }
+
+  /* Universal Pointer Events & Touch Interactivity Engine */
+  button,
+  [role="button"],
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"] {
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+
+  /* Child SVG icons must not intercept pointer events from button parent */
+  button svg,
+  [role="button"] svg {
+    pointer-events: none;
+  }
+
+  /* Universal Disabled State Enforcement */
+  button:disabled,
+  button[disabled],
+  [role="button"][aria-disabled="true"],
+  input[type="button"]:disabled,
+  input[type="submit"]:disabled {
+    cursor: not-allowed;
+    pointer-events: none;
+  }
 }
 
 @keyframes shimmer {

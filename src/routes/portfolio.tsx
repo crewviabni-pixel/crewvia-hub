@@ -875,7 +875,7 @@ function PublicPortfolioShowcasePage() {
         <div className="pointer-events-auto flex items-center gap-2">
           <button
             onClick={() => handleOpenBooking()}
-            className="hidden sm:inline-flex items-center gap-2 px-5.5 h-11 rounded-full bg-slate-950 hover:bg-slate-800 text-white font-semibold text-sm tracking-wide active:scale-95 transition-all shadow-xl shadow-slate-900/15 border border-slate-900 select-none box-border shrink-0"
+            className="hidden sm:inline-flex items-center gap-2 px-5.5 h-11 rounded-full bg-slate-950 hover:bg-slate-800 text-white font-semibold text-sm tracking-wide active:scale-95 transition-all shadow-xl shadow-slate-900/15 border border-slate-900 select-none box-border shrink-0 pointer-events-auto cursor-pointer"
           >
             <Calendar className="size-4 text-cyan-400 shrink-0" />
             <span>Book Call</span>
@@ -889,7 +889,7 @@ function PublicPortfolioShowcasePage() {
           <p className="text-sm text-slate-600 font-medium">No presentations found in this category.</p>
           <button
             onClick={() => setActiveCategory("All")}
-            className="px-4 py-2 rounded-full bg-slate-900 text-xs text-white hover:bg-slate-800 transition-colors shadow-md"
+            className="px-4 py-2 rounded-full bg-slate-900 text-xs text-white hover:bg-slate-800 transition-colors shadow-md pointer-events-auto cursor-pointer"
           >
             Show All Presentations
           </button>
@@ -978,7 +978,7 @@ function PublicPortfolioShowcasePage() {
               <button
                 key={cat}
                 onClick={() => handleCategorySelect(cat)}
-                className={`flex items-center justify-center px-3.5 sm:px-4 h-8 rounded-full text-xs font-semibold tracking-tight transition-all duration-200 shrink-0 select-none whitespace-nowrap ${
+                className={`flex items-center justify-center px-3.5 sm:px-4 h-8 rounded-full text-xs font-semibold tracking-tight transition-all duration-200 shrink-0 select-none whitespace-nowrap pointer-events-auto cursor-pointer ${
                   isSelected
                     ? "bg-slate-950 text-white shadow-sm"
                     : "text-slate-600 hover:text-slate-950 hover:bg-slate-100/80"
@@ -1016,7 +1016,7 @@ function PublicPortfolioShowcasePage() {
                       handleCategorySelect(cat);
                       setIsCategoryMenuOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all pointer-events-auto cursor-pointer ${
                       isSelected
                         ? "bg-slate-950 text-white shadow-sm"
                         : "text-slate-700 hover:text-slate-950 hover:bg-slate-100"
@@ -1044,7 +1044,7 @@ function PublicPortfolioShowcasePage() {
           {/* Category Trigger Button (Opens Reverse Dropdown Upward) */}
           <button
             onClick={() => setIsCategoryMenuOpen((prev) => !prev)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold tracking-tight transition-all duration-200 select-none ${
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold tracking-tight transition-all duration-200 select-none pointer-events-auto cursor-pointer ${
               isCategoryMenuOpen
                 ? "bg-slate-900 text-white shadow-md ring-1 ring-slate-900"
                 : "bg-slate-100/90 hover:bg-slate-200/90 text-slate-800"
@@ -1066,7 +1066,7 @@ function PublicPortfolioShowcasePage() {
           {/* Book Call Button in Bottom Dock (Mobile) */}
           <button
             onClick={() => handleOpenBooking()}
-            className="group flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-950 text-white font-semibold text-xs tracking-wide shadow-lg hover:bg-slate-800 active:scale-95 transition-all duration-200 whitespace-nowrap"
+            className="group flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-950 text-white font-semibold text-xs tracking-wide shadow-lg hover:bg-slate-800 active:scale-95 transition-all duration-200 whitespace-nowrap pointer-events-auto cursor-pointer"
           >
             <Calendar className="size-3.5 text-cyan-400 shrink-0" />
             <span>Book Call</span>
@@ -1197,7 +1197,7 @@ function PublicPortfolioShowcasePage() {
                 <button
                   type="submit"
                   disabled={isSubmittingBooking}
-                  className="w-full py-3 rounded-xl bg-neutral-950 hover:bg-neutral-800 text-white font-semibold text-xs tracking-wide shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 disabled:opacity-50"
+                  className="w-full py-3 rounded-xl bg-neutral-950 hover:bg-neutral-800 text-white font-semibold text-xs tracking-wide shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 disabled:opacity-50 pointer-events-auto cursor-pointer"
                 >
                   <Send className="size-3.5" />
                   <span>{isSubmittingBooking ? "Connecting..." : "Request Deck Consultation"}</span>
@@ -1232,6 +1232,15 @@ const PredictiveSkeletonCard = memo(function PredictiveSkeletonCard({
   return (
     <div
       onClick={() => onOpen?.(deck, 0)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen?.(deck, 0);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open presentation preview: ${deck.title}`}
       style={{
         isolation: "isolate",
       }}
@@ -1436,14 +1445,23 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
       onPointerDown={handleCardPointerDown}
       onPointerUp={handleCardPointerUp}
       onClick={handleCardClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          triggerOpen();
+        }
+      }}
+      role="button"
+      tabIndex={isSkeleton ? -1 : 0}
+      aria-label={`Open presentation: ${deck.title}`}
       style={{
         isolation: "isolate",
         WebkitMaskImage: "-webkit-radial-gradient(white, black)",
         maskImage: "radial-gradient(white, black)",
       }}
-      className={`group relative size-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg shadow-slate-900/[0.04] border border-slate-200/90 bg-slate-950 transition-all duration-200 select-none ${
+      className={`group relative size-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg shadow-slate-900/[0.04] border border-slate-200/90 bg-slate-950 transition-all duration-200 select-none pointer-events-auto ${
         isSkeleton
-          ? "cursor-default"
+          ? "cursor-default pointer-events-none"
           : "cursor-pointer hover:border-slate-400/60 hover:shadow-xl hover:shadow-slate-900/10"
       }`}
     >
@@ -1550,7 +1568,7 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
           <button
             onClick={handlePrevSlide}
             title="Previous slide"
-            className="size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90"
+            className="size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90 pointer-events-auto cursor-pointer"
           >
             <ChevronLeft className="size-3" />
           </button>
@@ -1560,7 +1578,7 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
           <button
             onClick={handleNextSlide}
             title="Next slide"
-            className="size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90"
+            className="size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90 pointer-events-auto cursor-pointer"
           >
             <ChevronRight className="size-3" />
           </button>
@@ -1584,10 +1602,20 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
       {/* STATE 3: DARK FADE BOTTOM DOCK ON HOVER (NO WHITE BLUR, 4 DATA POINTS ONLY) */}
       {showRealContent && isSeen && (
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="Open presentation"
           className="absolute bottom-0 inset-x-0 z-20 pt-12 pb-3 px-3 sm:px-4 bg-gradient-to-t from-slate-950/95 via-slate-950/65 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto cursor-pointer"
           onClick={(e) => {
             e.stopPropagation();
             triggerOpen();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              triggerOpen();
+            }
           }}
         >
           {/* Left Group: Copy link, Views count, Likes count */}
@@ -1596,7 +1624,7 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
             <button
               onClick={(e) => onShare(deck, e)}
               title={isCopied ? "Link copied!" : "Copy presentation link"}
-              className="size-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-sm"
+              className="size-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-sm pointer-events-auto cursor-pointer"
             >
               {isCopied ? (
                 <Check className="size-3.5 text-emerald-400" />
@@ -1608,7 +1636,7 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
             {/* 2. View Count Pill */}
             <div
               title={`${viewCount} total client views`}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/10 border border-white/20 text-[11px] font-semibold text-white select-none shadow-md backdrop-blur-sm"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/10 border border-white/20 text-[11px] font-semibold text-white select-none shadow-md backdrop-blur-sm pointer-events-none"
             >
               <Eye className="size-3.5 text-cyan-400 shrink-0" />
               <span>{formatCompactNumber(viewCount)}</span>
@@ -1619,7 +1647,7 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
               onClick={handleLikeToggle}
               title={isLiked ? "Unlike presentation" : "Like presentation"}
               className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] font-semibold transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-sm select-none",
+                "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] font-semibold transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-sm select-none pointer-events-auto cursor-pointer",
                 isLiked
                   ? "bg-rose-500/25 border-rose-500/50 text-rose-300"
                   : "bg-white/10 hover:bg-rose-500/15 border-white/20 hover:border-rose-400/40 text-white hover:text-rose-300"
@@ -1642,7 +1670,7 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
               triggerOpen();
             }}
             title="Open presentation deck"
-            className="size-8 sm:size-8.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all shrink-0"
+            className="size-8 sm:size-8.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all shrink-0 pointer-events-auto cursor-pointer"
           >
             <ArrowUpRight className="size-4 text-slate-950 stroke-[2.5]" />
           </button>

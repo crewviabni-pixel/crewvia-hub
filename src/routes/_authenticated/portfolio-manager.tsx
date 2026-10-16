@@ -721,7 +721,7 @@ function AdminPortfolioPage() {
           <button
             onClick={handleManualCloudSync}
             disabled={isSyncingCloud}
-            className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 sm:px-3.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 transition-all shadow-xs flex-1 sm:flex-initial"
+            className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 sm:px-3.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 transition-all shadow-xs flex-1 sm:flex-initial pointer-events-auto cursor-pointer"
             title="Sync all current presentation decks to live cloud showcase"
           >
             {isSyncingCloud ? (
@@ -736,7 +736,7 @@ function AdminPortfolioPage() {
             href="/portfolio"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 rounded-xl border border-border/80 bg-card hover:bg-secondary px-3 sm:px-4 text-xs font-semibold text-foreground transition-all shadow-xs hover:border-foreground/20 flex-1 sm:flex-initial"
+            className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 rounded-xl border border-border/80 bg-card hover:bg-secondary px-3 sm:px-4 text-xs font-semibold text-foreground transition-all shadow-xs hover:border-foreground/20 flex-1 sm:flex-initial pointer-events-auto cursor-pointer"
           >
             <span>Live Showcase</span>
             <ExternalLink className="size-3.5 text-muted-foreground" />
@@ -744,7 +744,7 @@ function AdminPortfolioPage() {
 
           <button
             onClick={() => handleCopyShowcaseUrl()}
-            className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 rounded-xl border border-border/80 bg-card hover:bg-secondary px-3 sm:px-4 text-xs font-semibold text-foreground transition-all shadow-xs hover:border-foreground/20 flex-1 sm:flex-initial"
+            className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-10 rounded-xl border border-border/80 bg-card hover:bg-secondary px-3 sm:px-4 text-xs font-semibold text-foreground transition-all shadow-xs hover:border-foreground/20 flex-1 sm:flex-initial pointer-events-auto cursor-pointer"
           >
             {copiedId === "general" ? (
               <Check className="size-3.5 text-emerald-500" />
@@ -757,7 +757,7 @@ function AdminPortfolioPage() {
 
           <button
             onClick={handleOpenCreate}
-            className="inline-flex items-center justify-center gap-2 h-9 sm:h-10 rounded-xl bg-primary hover:bg-primary/90 px-3.5 sm:px-4 text-xs font-semibold text-primary-foreground transition-all shadow-md active:scale-95 w-full sm:w-auto"
+            className="inline-flex items-center justify-center gap-2 h-9 sm:h-10 rounded-xl bg-primary hover:bg-primary/90 px-3.5 sm:px-4 text-xs font-semibold text-primary-foreground transition-all shadow-md active:scale-95 w-full sm:w-auto pointer-events-auto cursor-pointer"
           >
             <Plus className="size-4" />
             <span>Upload Presentation</span>
@@ -837,7 +837,7 @@ function AdminPortfolioPage() {
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 touch-pan-x">
             <button
               onClick={() => setCategoryFilter("All")}
-              className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap pointer-events-auto cursor-pointer ${
                 categoryFilter === "All"
                   ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                   : "bg-secondary text-muted-foreground hover:text-foreground"
@@ -849,7 +849,7 @@ function AdminPortfolioPage() {
               <button
                 key={cat}
                 onClick={() => setCategoryFilter(cat)}
-                className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
+                className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap pointer-events-auto cursor-pointer ${
                   categoryFilter === cat
                     ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                     : "bg-secondary text-muted-foreground hover:text-foreground"
@@ -881,7 +881,7 @@ function AdminPortfolioPage() {
             <div className="pt-2 flex items-center justify-center gap-2">
               <button
                 onClick={handleOpenCreate}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-all shadow-md active:scale-95"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-all shadow-md active:scale-95 pointer-events-auto cursor-pointer"
               >
                 <UploadCloud className="size-4" />
                 <span>Upload Presentation</span>
@@ -898,11 +898,21 @@ function AdminPortfolioPage() {
               >
                 {/* Presentation Thumbnail Stage */}
                 <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Preview ${item.title}`}
                   onClick={() => {
                     setPreviewDeck(item);
                     setPreviewSlideIndex(0);
                   }}
-                  className="relative aspect-[16/10] sm:aspect-[16/9] w-full overflow-hidden bg-neutral-950 cursor-pointer"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setPreviewDeck(item);
+                      setPreviewSlideIndex(0);
+                    }
+                  }}
+                  className="relative aspect-[16/10] sm:aspect-[16/9] w-full overflow-hidden bg-neutral-950 cursor-pointer pointer-events-auto"
                 >
                   {/* Full-Bleed High-Res Slide Cover Image */}
                   <img
@@ -991,7 +1001,7 @@ function AdminPortfolioPage() {
                           <button
                             onClick={(e) => handleCopyShowcaseUrl(item.id, e)}
                             title="Copy direct presentation link for client"
-                            className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition-colors"
+                            className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition-colors pointer-events-auto cursor-pointer"
                           >
                             {copiedId === item.id ? (
                               <Check className="size-4 text-emerald-400" />
@@ -1007,7 +1017,7 @@ function AdminPortfolioPage() {
                               setPreviewSlideIndex(0);
                             }}
                             title="Preview presentation modal"
-                            className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition-colors"
+                            className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition-colors pointer-events-auto cursor-pointer"
                           >
                             <Eye className="size-4" />
                           </button>
@@ -1018,7 +1028,7 @@ function AdminPortfolioPage() {
                               handleOpenEdit(item);
                             }}
                             title="Edit presentation details"
-                            className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition-colors"
+                            className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition-colors pointer-events-auto cursor-pointer"
                           >
                             <Edit2 className="size-4" />
                           </button>
@@ -1029,7 +1039,7 @@ function AdminPortfolioPage() {
                               setDeleteConfirmItem(item);
                             }}
                             title="Delete presentation"
-                            className="p-2 rounded-xl bg-rose-500/25 hover:bg-rose-500/40 text-rose-300 transition-colors"
+                            className="p-2 rounded-xl bg-rose-500/25 hover:bg-rose-500/40 text-rose-300 transition-colors pointer-events-auto cursor-pointer"
                           >
                             <Trash2 className="size-4" />
                           </button>
@@ -1072,7 +1082,7 @@ function AdminPortfolioPage() {
                         setPreviewDeck(item);
                         setPreviewSlideIndex(0);
                       }}
-                      className="flex items-center justify-center gap-1 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold"
+                      className="flex items-center justify-center gap-1 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold pointer-events-auto cursor-pointer"
                     >
                       <Eye className="size-3.5 text-primary" />
                       <span>View</span>
@@ -1080,7 +1090,7 @@ function AdminPortfolioPage() {
 
                     <button
                       onClick={(e) => handleCopyShowcaseUrl(item.id, e)}
-                      className="flex items-center justify-center gap-1 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold"
+                      className="flex items-center justify-center gap-1 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold pointer-events-auto cursor-pointer"
                     >
                       {copiedId === item.id ? (
                         <Check className="size-3.5 text-emerald-500" />
@@ -1092,7 +1102,7 @@ function AdminPortfolioPage() {
 
                     <button
                       onClick={() => handleOpenEdit(item)}
-                      className="flex items-center justify-center gap-1 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold"
+                      className="flex items-center justify-center gap-1 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold pointer-events-auto cursor-pointer"
                     >
                       <Edit2 className="size-3.5" />
                       <span>Edit</span>
@@ -1100,7 +1110,7 @@ function AdminPortfolioPage() {
 
                     <button
                       onClick={() => setDeleteConfirmItem(item)}
-                      className="flex items-center justify-center gap-1 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-semibold"
+                      className="flex items-center justify-center gap-1 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-semibold pointer-events-auto cursor-pointer"
                     >
                       <Trash2 className="size-3.5" />
                       <span>Delete</span>
@@ -1177,7 +1187,16 @@ function AdminPortfolioPage() {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 onClick={() => !isProcessingFile && singleFileInputRef.current?.click()}
-                className={`relative p-5 sm:p-8 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center text-center cursor-pointer select-none ${
+                role="button"
+                tabIndex={0}
+                aria-label="Upload presentation deck"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    singleFileInputRef.current?.click();
+                  }
+                }}
+                className={`relative p-5 sm:p-8 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center text-center cursor-pointer select-none pointer-events-auto ${
                   isDragging
                     ? "border-primary bg-primary/10 scale-[1.01]"
                     : isProcessingFile
@@ -1438,7 +1457,7 @@ function AdminPortfolioPage() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="h-10 sm:h-11 px-4 sm:px-5 flex-1 sm:flex-initial rounded-xl border border-border text-xs sm:text-sm font-semibold hover:bg-secondary transition-colors"
+                  className="h-10 sm:h-11 px-4 sm:px-5 flex-1 sm:flex-initial rounded-xl border border-border text-xs sm:text-sm font-semibold hover:bg-secondary transition-colors pointer-events-auto cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1446,7 +1465,7 @@ function AdminPortfolioPage() {
                 <button
                   type="submit"
                   disabled={isProcessingFile}
-                  className="h-10 sm:h-11 px-5 sm:px-6 flex-1 sm:flex-initial rounded-xl bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="h-10 sm:h-11 px-5 sm:px-6 flex-1 sm:flex-initial rounded-xl bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 pointer-events-auto cursor-pointer"
                 >
                   {isProcessingFile ? (
                     <>
@@ -1529,14 +1548,14 @@ function AdminPortfolioPage() {
             <button
               onClick={() => setIsClearAllDialogOpen(false)}
               disabled={isClearingAll}
-              className="h-10 px-4 rounded-xl border border-border text-xs font-semibold hover:bg-secondary transition-colors"
+              className="h-10 px-4 rounded-xl border border-border text-xs font-semibold hover:bg-secondary transition-colors pointer-events-auto cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={handleClearAllProjects}
               disabled={isClearingAll}
-              className="h-10 px-4 rounded-xl bg-destructive text-destructive-foreground text-xs font-semibold hover:bg-destructive/90 transition-all flex items-center justify-center gap-2"
+              className="h-10 px-4 rounded-xl bg-destructive text-destructive-foreground text-xs font-semibold hover:bg-destructive/90 transition-all flex items-center justify-center gap-2 pointer-events-auto cursor-pointer"
             >
               {isClearingAll ? (
                 <>

@@ -84,8 +84,17 @@ export function BniDateDisplay({ lead }: { lead: Lead }) {
 
   return (
     <div 
-      className="mt-2 inline-flex items-center gap-2 text-xs border border-border/50 bg-muted/30 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/50 transition-colors"
+      role="button"
+      tabIndex={0}
+      aria-label="Change BNI date"
+      className="mt-2 inline-flex items-center gap-2 text-xs border border-border/50 bg-muted/30 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/50 transition-colors pointer-events-auto"
       onClick={() => setEditing(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setEditing(true);
+        }
+      }}
       title="Click to change date"
     >
       <Calendar className="size-3.5 text-muted-foreground" />

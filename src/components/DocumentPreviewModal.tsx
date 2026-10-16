@@ -137,7 +137,7 @@ export function DocumentPreviewModal({
                   type="button"
                   onClick={handleExpireLink}
                   disabled={isProcessing}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50 pointer-events-auto cursor-pointer"
                   title="Immediately expire this preview link so client cannot view it"
                 >
                   {isProcessing ? <Loader2 className="size-3 animate-spin" /> : <Ban className="size-3" />}
@@ -148,7 +148,7 @@ export function DocumentPreviewModal({
                   type="button"
                   onClick={handleRegenerateLink}
                   disabled={isProcessing}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-accent text-accent-foreground hover:bg-accent/90 transition-all shadow-sm disabled:opacity-50"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-accent text-accent-foreground hover:bg-accent/90 transition-all shadow-sm disabled:opacity-50 pointer-events-auto cursor-pointer"
                   title="Generate a brand new link and reactivate access"
                 >
                   {isProcessing ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
@@ -162,7 +162,7 @@ export function DocumentPreviewModal({
                   type="button"
                   onClick={handleRegenerateLink}
                   disabled={isProcessing}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-border bg-secondary/80 hover:bg-secondary text-foreground transition-all disabled:opacity-50"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-border bg-secondary/80 hover:bg-secondary text-foreground transition-all disabled:opacity-50 pointer-events-auto cursor-pointer"
                   title="Invalidate old link and create a fresh new URL"
                 >
                   <RefreshCw className="size-3" />
@@ -173,7 +173,7 @@ export function DocumentPreviewModal({
               {/* Copy Link */}
               <button
                 onClick={handleCopyLink}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground transition-all shadow-sm"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground transition-all shadow-sm pointer-events-auto cursor-pointer"
                 title="Copy Client Preview Link to share"
               >
                 {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
@@ -186,7 +186,7 @@ export function DocumentPreviewModal({
                     onOpenChange(false);
                     onOpenWhatsApp(currentWorkItem);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm pointer-events-auto cursor-pointer"
                   title="Send Preview via WhatsApp"
                 >
                   <MessageCircle className="size-3.5" />

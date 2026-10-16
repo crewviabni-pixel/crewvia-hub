@@ -605,8 +605,16 @@ export function PresentationLightroomModal({
     >
       {/* Click Backdrop Outside to Close */}
       <div
+        role="button"
+        tabIndex={0}
         onClick={onClose}
-        className="absolute inset-0 -z-10 cursor-pointer"
+        onKeyDown={(e) => {
+          if (e.key === "Escape" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+        className="absolute inset-0 -z-10 cursor-pointer pointer-events-auto"
         aria-label="Click outside to close preview"
       />
 
@@ -660,7 +668,7 @@ export function PresentationLightroomModal({
             <button
               onClick={handleLikeToggle}
               title={isLiked ? "Unlike presentation" : "Like presentation"}
-              className="flex items-center gap-1 sm:gap-1.5 group/like active:scale-90 transition-transform cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 group/like active:scale-90 transition-transform pointer-events-auto cursor-pointer"
             >
               <Heart
                 className={cn(
@@ -700,7 +708,7 @@ export function PresentationLightroomModal({
             onClick={() => setIsZoomed(!isZoomed)}
             title={isZoomed ? "Reset Zoom" : "Zoom In (Double-tap slide)"}
             className={cn(
-              "hidden sm:flex size-[48px] rounded-full items-center justify-center transition-all shadow-md active:scale-95 shrink-0 border",
+              "hidden sm:flex size-[48px] rounded-full items-center justify-center transition-all shadow-md active:scale-95 shrink-0 border pointer-events-auto cursor-pointer",
               isZoomed
                 ? "bg-primary text-white border-primary shadow-primary/30"
                 : "bg-white hover:bg-slate-50 border-slate-200/90 text-slate-800 hover:text-black"
@@ -714,7 +722,7 @@ export function PresentationLightroomModal({
             onClick={onClose}
             title="Close Preview (Esc or Swipe down)"
             className={cn(
-              "rounded-full bg-[#0f172a] hover:bg-black active:scale-95 text-white flex items-center justify-center transition-all shadow-xl border border-white/10 shrink-0",
+              "rounded-full bg-[#0f172a] hover:bg-black active:scale-95 text-white flex items-center justify-center transition-all shadow-xl border border-white/10 shrink-0 pointer-events-auto cursor-pointer",
               isMobile ? "size-[44px]" : "size-[48px]"
             )}
           >
@@ -911,7 +919,7 @@ export function PresentationLightroomModal({
                     handlePrev();
                   }}
                   title="Previous Slide"
-                  className="absolute left-2.5 sm:left-4 top-1/2 -translate-y-1/2 z-20 size-8.5 sm:size-10 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-md text-white border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95 shadow-xl hidden sm:flex"
+                  className="absolute left-2.5 sm:left-4 top-1/2 -translate-y-1/2 z-20 size-8.5 sm:size-10 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-md text-white border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95 shadow-xl hidden sm:flex pointer-events-auto cursor-pointer"
                 >
                   <ChevronLeft className="size-4.5 sm:size-5" />
                 </button>
@@ -922,7 +930,7 @@ export function PresentationLightroomModal({
                     handleNext();
                   }}
                   title="Next Slide"
-                  className="absolute right-2.5 sm:right-4 top-1/2 -translate-y-1/2 z-20 size-8.5 sm:size-10 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-md text-white border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95 shadow-xl hidden sm:flex"
+                  className="absolute right-2.5 sm:right-4 top-1/2 -translate-y-1/2 z-20 size-8.5 sm:size-10 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-md text-white border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95 shadow-xl hidden sm:flex pointer-events-auto cursor-pointer"
                 >
                   <ChevronRight className="size-4.5 sm:size-5" />
                 </button>
@@ -941,7 +949,7 @@ export function PresentationLightroomModal({
               <button
                 key={slide.id || sIdx}
                 onClick={() => setIndex(sIdx)}
-                className={`relative aspect-[16/9] h-12 sm:h-14 rounded-lg overflow-hidden border transition-all duration-200 shrink-0 ${
+                className={`relative aspect-[16/9] h-12 sm:h-14 rounded-lg overflow-hidden border transition-all duration-200 shrink-0 pointer-events-auto cursor-pointer ${
                   isActive
                     ? "border-primary ring-2 ring-primary/40 scale-105 shadow-md shadow-primary/20"
                     : "border-slate-200 opacity-60 hover:opacity-100 hover:border-slate-400"
@@ -982,7 +990,7 @@ export function PresentationLightroomModal({
           onClick={handleNativeShare}
           title="Share presentation"
           className={cn(
-            "rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 hover:text-black transition-all active:scale-95 shrink-0",
+            "rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 hover:text-black transition-all active:scale-95 shrink-0 pointer-events-auto cursor-pointer",
             isThinMobile ? "size-[28px]" : isMobile ? "size-[38px]" : "size-[42px]"
           )}
         >
@@ -998,7 +1006,7 @@ export function PresentationLightroomModal({
           onClick={handleDownload}
           title={deck.pdf_url ? "Download presentation PDF" : "Download slide image"}
           className={cn(
-            "rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 hover:text-black transition-all active:scale-95 shrink-0",
+            "rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 hover:text-black transition-all active:scale-95 shrink-0 pointer-events-auto cursor-pointer",
             isThinMobile ? "size-[28px]" : isMobile ? "size-[38px]" : "size-[42px]"
           )}
         >
@@ -1014,7 +1022,7 @@ export function PresentationLightroomModal({
               : "Expand to Landscape Widescreen View"
           }
           className={cn(
-            "rounded-full flex items-center justify-center transition-all active:scale-95 shrink-0",
+            "rounded-full flex items-center justify-center transition-all active:scale-95 shrink-0 pointer-events-auto cursor-pointer",
             isThinMobile ? "size-[28px]" : isMobile ? "size-[38px]" : "size-[42px]",
             rotation === 90
               ? "bg-slate-900 text-white font-bold ring-2 ring-primary/40 shadow-sm"
@@ -1034,7 +1042,7 @@ export function PresentationLightroomModal({
         <button
           onClick={toggleFullscreen}
           title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-          className="hidden sm:flex size-[42px] rounded-full hover:bg-slate-100 items-center justify-center text-slate-700 hover:text-black transition-all active:scale-95 shrink-0"
+          className="hidden sm:flex size-[42px] rounded-full hover:bg-slate-100 items-center justify-center text-slate-700 hover:text-black transition-all active:scale-95 shrink-0 pointer-events-auto cursor-pointer"
         >
           {isFullscreen ? (
             <Minimize2 className="size-5" />
@@ -1049,7 +1057,7 @@ export function PresentationLightroomModal({
             onClick={() => setShowThumbnails(!showThumbnails)}
             title={showThumbnails ? "Hide slide thumbnails" : "View all slides"}
             className={cn(
-              "hidden sm:flex size-[42px] rounded-full items-center justify-center transition-all active:scale-95 shrink-0",
+              "hidden sm:flex size-[42px] rounded-full items-center justify-center transition-all active:scale-95 shrink-0 pointer-events-auto cursor-pointer",
               showThumbnails
                 ? "bg-slate-200 text-black font-bold"
                 : "hover:bg-slate-100 text-slate-700 hover:text-black"
@@ -1065,7 +1073,7 @@ export function PresentationLightroomModal({
             <button
               onClick={onEdit}
               className={cn(
-                "rounded-full bg-[#0f172a] hover:bg-black text-white font-semibold tracking-wide shadow-md flex items-center active:scale-95 transition-all whitespace-nowrap shrink-0",
+                "rounded-full bg-[#0f172a] hover:bg-black text-white font-semibold tracking-wide shadow-md flex items-center active:scale-95 transition-all whitespace-nowrap shrink-0 pointer-events-auto cursor-pointer",
                 isThinMobile
                   ? "h-[28px] px-2.5 text-[11px] gap-1"
                   : isMobile
@@ -1084,7 +1092,7 @@ export function PresentationLightroomModal({
               if (onBook) onBook();
             }}
             className={cn(
-              "rounded-full bg-[#0f172a] hover:bg-black text-white font-semibold tracking-wide shadow-md flex items-center active:scale-95 transition-all whitespace-nowrap shrink-0",
+              "rounded-full bg-[#0f172a] hover:bg-black text-white font-semibold tracking-wide shadow-md flex items-center active:scale-95 transition-all whitespace-nowrap shrink-0 pointer-events-auto cursor-pointer",
               isThinMobile
                 ? "h-[28px] px-2.5 text-[11px] gap-1"
                 : isMobile
@@ -1103,7 +1111,7 @@ export function PresentationLightroomModal({
             onClick={handlePrev}
             title="Previous Slide"
             className={cn(
-              "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0",
+              "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0 pointer-events-auto cursor-pointer",
               isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]"
             )}
           >
@@ -1127,7 +1135,7 @@ export function PresentationLightroomModal({
             onClick={handleNext}
             title="Next Slide"
             className={cn(
-              "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0",
+              "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0 pointer-events-auto cursor-pointer",
               isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]"
             )}
           >

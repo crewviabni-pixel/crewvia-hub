@@ -704,11 +704,11 @@ export function DocumentCanvasViewer({
 
         {/* Center: Slide Pagination */}
         {fileType === "pdf" && numPages > 1 ? (
-          <div className="flex items-center gap-1.5 bg-neutral-800/90 rounded-lg px-2 py-1 text-xs font-semibold shadow-inner border border-neutral-700/60">
+          <div className="flex items-center gap-1.5 bg-neutral-800/90 rounded-lg px-2 py-1 text-xs font-semibold shadow-inner border border-neutral-700/60 pointer-events-auto">
             <button
               onClick={goToPrevPage}
               disabled={currentPage <= 1}
-              className="p-1 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white disabled:opacity-25 transition-colors"
+              className="p-1 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white disabled:opacity-25 transition-colors pointer-events-auto cursor-pointer"
               title="Previous Slide (← Left Arrow)"
             >
               <ChevronLeft className="size-4" />
@@ -716,7 +716,7 @@ export function DocumentCanvasViewer({
 
             <button
               onClick={() => setShowSlideSheet(true)}
-              className="px-1 text-white font-mono text-xs tracking-tight hover:text-accent transition-colors flex items-center gap-1"
+              className="px-1 text-white font-mono text-xs tracking-tight hover:text-accent transition-colors flex items-center gap-1 pointer-events-auto cursor-pointer"
               title="Click to view all slides"
             >
               <span>{currentPage}</span>
@@ -728,7 +728,7 @@ export function DocumentCanvasViewer({
             <button
               onClick={goToNextPage}
               disabled={currentPage >= numPages}
-              className="p-1 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white disabled:opacity-25 transition-colors"
+              className="p-1 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white disabled:opacity-25 transition-colors pointer-events-auto cursor-pointer"
               title="Next Slide (→ Right Arrow)"
             >
               <ChevronRight className="size-4" />
@@ -742,11 +742,11 @@ export function DocumentCanvasViewer({
         )}
 
         {/* Right: Rotate, Zoom & Fullscreen Controls */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 pointer-events-auto">
           {/* Rotate 90° Clockwise */}
           <button
             onClick={handleRotateClockwise}
-            className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+            className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 pointer-events-auto cursor-pointer ${
               rotation !== 0
                 ? "bg-accent/20 text-accent border border-accent/30 font-semibold"
                 : "text-neutral-400 hover:text-white hover:bg-neutral-800"
@@ -761,7 +761,7 @@ export function DocumentCanvasViewer({
           {rotation !== 0 && (
             <button
               onClick={handleResetRotation}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors pointer-events-auto cursor-pointer"
               title="Reset rotation to 0°"
             >
               <RotateCcw className="size-3.5" />
@@ -773,7 +773,7 @@ export function DocumentCanvasViewer({
           {/* Zoom Out */}
           <button
             onClick={() => setZoomLevel((z) => Math.max(0.6, +(z - 0.15).toFixed(2)))}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors pointer-events-auto cursor-pointer"
             title="Zoom Out"
           >
             <ZoomOut className="size-4" />
@@ -782,7 +782,7 @@ export function DocumentCanvasViewer({
           {/* Zoom Level Reset */}
           <button
             onClick={() => setZoomLevel(1.0)}
-            className="px-1.5 py-0.5 rounded text-[11px] font-mono text-neutral-300 hover:text-accent hover:bg-neutral-800/80 transition-colors min-w-[42px] text-center"
+            className="px-1.5 py-0.5 rounded text-[11px] font-mono text-neutral-300 hover:text-accent hover:bg-neutral-800/80 transition-colors min-w-[42px] text-center pointer-events-auto cursor-pointer"
             title="Click to reset to 100% Auto-Fit"
           >
             {zoomPercent === 100 ? "Fit" : `${zoomPercent}%`}
@@ -791,7 +791,7 @@ export function DocumentCanvasViewer({
           {/* Zoom In */}
           <button
             onClick={() => setZoomLevel((z) => Math.min(2.5, +(z + 0.15).toFixed(2)))}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors pointer-events-auto cursor-pointer"
             title="Zoom In"
           >
             <ZoomIn className="size-4" />
@@ -802,7 +802,7 @@ export function DocumentCanvasViewer({
           {/* Fullscreen Toggle */}
           <button
             onClick={toggleFullscreen}
-            className={`p-1.5 rounded-lg transition-all ${
+            className={`p-1.5 rounded-lg transition-all pointer-events-auto cursor-pointer ${
               isFullscreen
                 ? "bg-accent text-accent-foreground shadow-md"
                 : "text-neutral-300 hover:text-white hover:bg-neutral-800"
@@ -903,7 +903,7 @@ export function DocumentCanvasViewer({
               <button
                 type="button"
                 onClick={goToPrevPage}
-                className="hidden md:flex absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 size-9 sm:size-11 rounded-full bg-neutral-900/80 hover:bg-neutral-800 backdrop-blur-md border border-white/20 text-white items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95"
+                className="hidden md:flex absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 size-9 sm:size-11 rounded-full bg-neutral-900/80 hover:bg-neutral-800 backdrop-blur-md border border-white/20 text-white items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95 pointer-events-auto cursor-pointer"
                 title="Previous slide (← Left Arrow)"
               >
                 <ChevronLeft className="size-5 sm:size-6" />
@@ -915,7 +915,7 @@ export function DocumentCanvasViewer({
               <button
                 type="button"
                 onClick={goToNextPage}
-                className="hidden md:flex absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 size-9 sm:size-11 rounded-full bg-neutral-900/80 hover:bg-neutral-800 backdrop-blur-md border border-white/20 text-white items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95"
+                className="hidden md:flex absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 size-9 sm:size-11 rounded-full bg-neutral-900/80 hover:bg-neutral-800 backdrop-blur-md border border-white/20 text-white items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95 pointer-events-auto cursor-pointer"
                 title="Next slide (→ Right Arrow)"
               >
                 <ChevronRight className="size-5 sm:size-6" />
@@ -928,13 +928,13 @@ export function DocumentCanvasViewer({
       {/* Mobile Horizontal (Landscape) Sleek Side Capsule Dock */}
       {isMobileLandscape && (
         <div
-          className="flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shrink-0 z-30 select-none animate-in fade-in duration-200"
+          className="flex flex-col items-center justify-center gap-1.5 py-1.5 px-1 bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl shrink-0 z-30 select-none animate-in fade-in duration-200 pointer-events-auto"
           style={{ maxHeight: "calc(100dvh - 1rem)" }}
         >
           {/* Dock Side Switcher (Right ↔ Left) */}
           <button
             onClick={() => setDockPosition((pos) => (pos === "right" ? "left" : "right"))}
-            className="size-8 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 active:scale-90 text-neutral-300 hover:text-white flex items-center justify-center border border-white/5 transition-all"
+            className="size-8 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 active:scale-90 text-neutral-300 hover:text-white flex items-center justify-center border border-white/5 transition-all pointer-events-auto cursor-pointer"
             title={`Move controls to ${dockPosition === "right" ? "Left" : "Right"} side`}
             aria-label="Switch side dock position"
           >
@@ -945,12 +945,12 @@ export function DocumentCanvasViewer({
 
           {/* Slide Navigation (Vertical) */}
           {fileType === "pdf" && numPages > 1 ? (
-            <div className="flex flex-col items-center gap-1 bg-neutral-800/90 rounded-xl p-0.5 border border-white/5 shadow-inner">
+            <div className="flex flex-col items-center gap-1 bg-neutral-800/90 rounded-xl p-0.5 border border-white/5 shadow-inner pointer-events-auto">
               {/* Previous Slide */}
               <button
                 onClick={goToPrevPage}
                 disabled={currentPage <= 1}
-                className="size-8 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-90 transition-all hover:bg-neutral-700/60"
+                className="size-8 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-90 transition-all hover:bg-neutral-700/60 pointer-events-auto cursor-pointer"
                 title="Previous Slide"
                 aria-label="Previous Slide"
               >
@@ -960,7 +960,7 @@ export function DocumentCanvasViewer({
               {/* Slide Counter Pill */}
               <button
                 onClick={() => setShowSlideSheet(true)}
-                className="w-8 py-1 text-[10px] font-mono font-bold text-white flex flex-col items-center justify-center active:scale-90 transition-all hover:text-accent"
+                className="w-8 py-1 text-[10px] font-mono font-bold text-white flex flex-col items-center justify-center active:scale-90 transition-all hover:text-accent pointer-events-auto cursor-pointer"
                 title="Tap to browse all slides"
               >
                 <span>{currentPage}</span>
@@ -972,7 +972,7 @@ export function DocumentCanvasViewer({
               <button
                 onClick={goToNextPage}
                 disabled={currentPage >= numPages}
-                className="size-8 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-90 transition-all hover:bg-neutral-700/60"
+                className="size-8 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-90 transition-all hover:bg-neutral-700/60 pointer-events-auto cursor-pointer"
                 title="Next Slide"
                 aria-label="Next Slide"
               >
@@ -986,7 +986,7 @@ export function DocumentCanvasViewer({
           {/* Rotate 90° Clockwise */}
           <button
             onClick={handleRotateClockwise}
-            className={`size-8 rounded-xl flex items-center justify-center transition-all active:scale-90 border ${
+            className={`size-8 rounded-xl flex items-center justify-center transition-all active:scale-90 border pointer-events-auto cursor-pointer ${
               rotation !== 0
                 ? "bg-accent text-accent-foreground font-bold border-accent shadow-md shadow-accent/25"
                 : "bg-neutral-800/90 text-neutral-200 border-white/5 hover:bg-neutral-700/70"
@@ -1001,7 +1001,7 @@ export function DocumentCanvasViewer({
           {rotation !== 0 && (
             <button
               onClick={handleResetRotation}
-              className="size-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-300 flex items-center justify-center border border-white/5 transition-all"
+              className="size-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-300 flex items-center justify-center border border-white/5 transition-all pointer-events-auto cursor-pointer"
               title="Reset rotation to 0°"
               aria-label="Reset rotation to 0"
             >
@@ -1014,7 +1014,7 @@ export function DocumentCanvasViewer({
             onClick={() => {
               setZoomLevel((prev) => (prev < 1.3 ? 1.6 : prev < 2.0 ? 2.2 : 1.0));
             }}
-            className="size-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-200 text-[10px] font-mono font-semibold flex items-center justify-center border border-white/5 transition-all"
+            className="size-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-200 text-[10px] font-mono font-semibold flex items-center justify-center border border-white/5 transition-all pointer-events-auto cursor-pointer"
             title="Tap to cycle zoom (Fit / 1.6x / 2.2x)"
             aria-label="Toggle zoom"
           >
@@ -1024,7 +1024,7 @@ export function DocumentCanvasViewer({
           {/* Fullscreen / Theater Mode Toggle */}
           <button
             onClick={toggleFullscreen}
-            className={`size-8 rounded-xl flex items-center justify-center transition-all active:scale-90 border ${
+            className={`size-8 rounded-xl flex items-center justify-center transition-all active:scale-90 border pointer-events-auto cursor-pointer ${
               isFullscreen
                 ? "bg-accent text-accent-foreground border-accent shadow-md"
                 : "bg-neutral-800/90 text-neutral-200 border-white/5 hover:bg-neutral-700/70"
@@ -1049,14 +1049,14 @@ export function DocumentCanvasViewer({
 
       {/* Mobile Floating Action & Navigation Capsule (Portrait only) */}
       {!isMobileLandscape && (
-        <div className="flex md:hidden items-center justify-between gap-1.5 w-full max-w-sm mx-auto mt-2 px-2.5 py-1.5 bg-neutral-900/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-xl">
+        <div className="flex md:hidden items-center justify-between gap-1.5 w-full max-w-sm mx-auto mt-2 px-2.5 py-1.5 bg-neutral-900/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-xl pointer-events-auto">
         {/* Left: Slide Navigation Pill */}
         {fileType === "pdf" && numPages > 1 ? (
-          <div className="flex items-center bg-neutral-800/90 rounded-xl p-0.5 border border-white/5 shadow-inner">
+          <div className="flex items-center bg-neutral-800/90 rounded-xl p-0.5 border border-white/5 shadow-inner pointer-events-auto">
             <button
               onClick={goToPrevPage}
               disabled={currentPage <= 1}
-              className="size-8.5 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all hover:bg-neutral-700/60"
+              className="size-8.5 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all hover:bg-neutral-700/60 pointer-events-auto cursor-pointer"
               aria-label="Previous Slide"
             >
               <ChevronLeft className="size-4.5" />
@@ -1065,7 +1065,7 @@ export function DocumentCanvasViewer({
             {/* Slide Pill: Tapping opens thumbnail drawer */}
             <button
               onClick={() => setShowSlideSheet(true)}
-              className="px-2 py-1 text-[11px] font-mono font-bold text-white flex items-center gap-1 active:scale-95 transition-all hover:text-accent"
+              className="px-2 py-1 text-[11px] font-mono font-bold text-white flex items-center gap-1 active:scale-95 transition-all hover:text-accent pointer-events-auto cursor-pointer"
               title="Tap to browse all slides"
             >
               <span>{currentPage}</span>
@@ -1077,25 +1077,25 @@ export function DocumentCanvasViewer({
             <button
               onClick={goToNextPage}
               disabled={currentPage >= numPages}
-              className="size-8.5 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all hover:bg-neutral-700/60"
+              className="size-8.5 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all hover:bg-neutral-700/60 pointer-events-auto cursor-pointer"
               aria-label="Next Slide"
             >
               <ChevronRight className="size-4.5" />
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-medium px-2">
+          <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-medium px-2 pointer-events-auto">
             <Eye className="size-3.5 text-accent" />
             <span>Document Preview</span>
           </div>
         )}
 
         {/* Right: Quick Action Buttons */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 pointer-events-auto">
           {/* Rotate 90° Clockwise */}
           <button
             onClick={handleRotateClockwise}
-            className={`h-9 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-all active:scale-95 border ${
+            className={`h-9 px-2.5 rounded-xl flex items-center justify-center gap-1 transition-all active:scale-95 border pointer-events-auto cursor-pointer ${
               rotation !== 0
                 ? "bg-accent text-accent-foreground font-bold border-accent shadow-md shadow-accent/25"
                 : "bg-neutral-800/90 text-neutral-200 border-white/5 hover:bg-neutral-700/70"
@@ -1111,7 +1111,7 @@ export function DocumentCanvasViewer({
           {rotation !== 0 && (
             <button
               onClick={handleResetRotation}
-              className="size-9 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-95 text-neutral-300 flex items-center justify-center border border-white/5 transition-all"
+              className="size-9 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-95 text-neutral-300 flex items-center justify-center border border-white/5 transition-all pointer-events-auto cursor-pointer"
               title="Reset rotation to 0°"
               aria-label="Reset rotation to 0"
             >
@@ -1124,7 +1124,7 @@ export function DocumentCanvasViewer({
             onClick={() => {
               setZoomLevel((prev) => (prev < 1.3 ? 1.6 : prev < 2.0 ? 2.2 : 1.0));
             }}
-            className="h-9 px-2.5 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-95 text-neutral-200 text-[11px] font-mono font-semibold flex items-center justify-center border border-white/5 transition-all"
+            className="h-9 px-2.5 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-95 text-neutral-200 text-[11px] font-mono font-semibold flex items-center justify-center border border-white/5 transition-all pointer-events-auto cursor-pointer"
             title="Tap to cycle zoom"
           >
             {zoomLevel > 1.8 ? "2.2x" : zoomLevel > 1.2 ? "1.6x" : "Fit"}
@@ -1133,7 +1133,7 @@ export function DocumentCanvasViewer({
           {/* Fullscreen / Expand Mode */}
           <button
             onClick={toggleFullscreen}
-            className={`size-9 rounded-xl flex items-center justify-center transition-all active:scale-95 border ${
+            className={`size-9 rounded-xl flex items-center justify-center transition-all active:scale-95 border pointer-events-auto cursor-pointer ${
               isFullscreen
                 ? "bg-accent text-accent-foreground border-accent shadow-md"
                 : "bg-neutral-800/90 text-neutral-200 border-white/5 hover:bg-neutral-700/70"
@@ -1178,11 +1178,11 @@ export function DocumentCanvasViewer({
       {/* Slide Thumbnails & Quick Scrubber Bottom Sheet Modal */}
       {showSlideSheet && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-150 pointer-events-auto"
           onClick={() => setShowSlideSheet(false)}
         >
           <div
-            className="w-full sm:max-w-md bg-neutral-900 border border-neutral-800 rounded-t-2xl sm:rounded-2xl p-4 sm:p-5 landscape:p-3 shadow-2xl space-y-4 landscape:space-y-2 max-h-[85vh] landscape:max-h-[90vh] flex flex-col"
+            className="w-full sm:max-w-md bg-neutral-900 border border-neutral-800 rounded-t-2xl sm:rounded-2xl p-4 sm:p-5 landscape:p-3 shadow-2xl space-y-4 landscape:space-y-2 max-h-[85vh] landscape:max-h-[90vh] flex flex-col pointer-events-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Sheet Pull Handle for mobile */}
@@ -1197,7 +1197,7 @@ export function DocumentCanvasViewer({
               </div>
               <button
                 onClick={() => setShowSlideSheet(false)}
-                className="size-7 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white flex items-center justify-center transition-colors"
+                className="size-7 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white flex items-center justify-center transition-colors pointer-events-auto cursor-pointer"
                 aria-label="Close slide sheet"
               >
                 <X className="size-4" />
@@ -1216,7 +1216,7 @@ export function DocumentCanvasViewer({
                 max={numPages}
                 value={currentPage}
                 onChange={(e) => setCurrentPage(Number(e.target.value))}
-                className="w-full accent-accent cursor-pointer h-2 bg-neutral-800 rounded-lg appearance-none"
+                className="w-full accent-accent cursor-pointer h-2 bg-neutral-800 rounded-lg appearance-none pointer-events-auto"
               />
             </div>
 
@@ -1234,7 +1234,7 @@ export function DocumentCanvasViewer({
                       setCurrentPage(pageNum);
                       setShowSlideSheet(false);
                     }}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl text-xs font-semibold transition-all border ${
+                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl text-xs font-semibold transition-all border pointer-events-auto cursor-pointer ${
                       isActive
                         ? "bg-accent text-accent-foreground border-accent shadow-md shadow-accent/25 scale-105"
                         : "bg-neutral-800/80 hover:bg-neutral-700 text-neutral-200 border-neutral-700/60"
@@ -1250,7 +1250,7 @@ export function DocumentCanvasViewer({
             <div className="pt-2 text-center">
               <button
                 onClick={() => setShowSlideSheet(false)}
-                className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white transition-colors"
+                className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white transition-colors pointer-events-auto cursor-pointer"
               >
                 Close
               </button>
