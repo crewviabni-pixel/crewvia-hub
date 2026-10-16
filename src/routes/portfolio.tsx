@@ -1374,12 +1374,12 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
 
   const handlePrevSlide = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentSlideIndex((prev) => (prev > 0 ? prev - 1 : totalSlides - 1));
+    setCurrentSlideIndex((prev) => Math.max(0, prev - 1));
   };
 
   const handleNextSlide = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentSlideIndex((prev) => (prev < totalSlides - 1 ? prev + 1 : 0));
+    setCurrentSlideIndex((prev) => Math.min(totalSlides - 1, prev + 1));
   };
 
   // Ultra-Accurate Single-Click & Touch-Tap Mechanism (0ms instant response)
@@ -1567,8 +1567,15 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
         >
           <button
             onClick={handlePrevSlide}
+            disabled={currentSlideIndex <= 0}
             title="Previous slide"
-            className="size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90 pointer-events-auto cursor-pointer"
+            aria-label="Previous slide"
+            className={cn(
+              "size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90",
+              currentSlideIndex <= 0
+                ? "invisible opacity-0 pointer-events-none"
+                : "pointer-events-auto cursor-pointer"
+            )}
           >
             <ChevronLeft className="size-3" />
           </button>
@@ -1577,8 +1584,15 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
           </span>
           <button
             onClick={handleNextSlide}
+            disabled={currentSlideIndex >= totalSlides - 1}
             title="Next slide"
-            className="size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90 pointer-events-auto cursor-pointer"
+            aria-label="Next slide"
+            className={cn(
+              "size-4.5 rounded-full hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors active:scale-90",
+              currentSlideIndex >= totalSlides - 1
+                ? "invisible opacity-0 pointer-events-none"
+                : "pointer-events-auto cursor-pointer"
+            )}
           >
             <ChevronRight className="size-3" />
           </button>

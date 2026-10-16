@@ -24,6 +24,7 @@ import {
   FoldHorizontal,
   Smartphone,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Configure pdf.js worker to match the installed version
 if (typeof window !== "undefined") {
@@ -708,7 +709,12 @@ export function DocumentCanvasViewer({
             <button
               onClick={goToPrevPage}
               disabled={currentPage <= 1}
-              className="p-1 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white disabled:opacity-25 transition-colors pointer-events-auto cursor-pointer"
+              className={cn(
+                "p-1 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors",
+                currentPage <= 1
+                  ? "invisible opacity-0 pointer-events-none"
+                  : "pointer-events-auto cursor-pointer"
+              )}
               title="Previous Slide (← Left Arrow)"
             >
               <ChevronLeft className="size-4" />
@@ -728,7 +734,12 @@ export function DocumentCanvasViewer({
             <button
               onClick={goToNextPage}
               disabled={currentPage >= numPages}
-              className="p-1 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white disabled:opacity-25 transition-colors pointer-events-auto cursor-pointer"
+              className={cn(
+                "p-1 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors",
+                currentPage >= numPages
+                  ? "invisible opacity-0 pointer-events-none"
+                  : "pointer-events-auto cursor-pointer"
+              )}
               title="Next Slide (→ Right Arrow)"
             >
               <ChevronRight className="size-4" />
@@ -950,7 +961,12 @@ export function DocumentCanvasViewer({
               <button
                 onClick={goToPrevPage}
                 disabled={currentPage <= 1}
-                className="size-8 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-90 transition-all hover:bg-neutral-700/60 pointer-events-auto cursor-pointer"
+                className={cn(
+                  "size-8 rounded-lg flex items-center justify-center text-white active:scale-90 transition-all hover:bg-neutral-700/60",
+                  currentPage <= 1
+                    ? "invisible opacity-0 pointer-events-none"
+                    : "pointer-events-auto cursor-pointer"
+                )}
                 title="Previous Slide"
                 aria-label="Previous Slide"
               >
@@ -972,7 +988,12 @@ export function DocumentCanvasViewer({
               <button
                 onClick={goToNextPage}
                 disabled={currentPage >= numPages}
-                className="size-8 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-90 transition-all hover:bg-neutral-700/60 pointer-events-auto cursor-pointer"
+                className={cn(
+                  "size-8 rounded-lg flex items-center justify-center text-white active:scale-90 transition-all hover:bg-neutral-700/60",
+                  currentPage >= numPages
+                    ? "invisible opacity-0 pointer-events-none"
+                    : "pointer-events-auto cursor-pointer"
+                )}
                 title="Next Slide"
                 aria-label="Next Slide"
               >
@@ -1056,7 +1077,12 @@ export function DocumentCanvasViewer({
             <button
               onClick={goToPrevPage}
               disabled={currentPage <= 1}
-              className="size-8.5 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all hover:bg-neutral-700/60 pointer-events-auto cursor-pointer"
+              className={cn(
+                "size-8.5 rounded-lg flex items-center justify-center text-white active:scale-95 transition-all hover:bg-neutral-700/60",
+                currentPage <= 1
+                  ? "invisible opacity-0 pointer-events-none"
+                  : "pointer-events-auto cursor-pointer"
+              )}
               aria-label="Previous Slide"
             >
               <ChevronLeft className="size-4.5" />
@@ -1077,7 +1103,12 @@ export function DocumentCanvasViewer({
             <button
               onClick={goToNextPage}
               disabled={currentPage >= numPages}
-              className="size-8.5 rounded-lg flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all hover:bg-neutral-700/60 pointer-events-auto cursor-pointer"
+              className={cn(
+                "size-8.5 rounded-lg flex items-center justify-center text-white active:scale-95 transition-all hover:bg-neutral-700/60",
+                currentPage >= numPages
+                  ? "invisible opacity-0 pointer-events-none"
+                  : "pointer-events-auto cursor-pointer"
+              )}
               aria-label="Next Slide"
             >
               <ChevronRight className="size-4.5" />

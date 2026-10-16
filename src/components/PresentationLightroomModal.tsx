@@ -303,34 +303,37 @@ export function PresentationLightroomModal({
 
   const setIndex = useCallback(
     (newIndex: number) => {
+      const clampedIndex = Math.max(0, Math.min(totalSlides - 1, newIndex));
       setIsZoomed(false);
       setTouchOffset(0);
       if (onSlideChange) {
-        onSlideChange(newIndex);
+        onSlideChange(clampedIndex);
       } else {
-        setInternalIndex(newIndex);
+        setInternalIndex(clampedIndex);
       }
     },
-    [onSlideChange]
+    [onSlideChange, totalSlides]
   );
 
   const handleNext = useCallback(() => {
+    if (activeSlideIndex >= totalSlides - 1) return;
     try {
       if (navigator.vibrate) navigator.vibrate(10);
     } catch {
       // ignore
     }
-    setIndex(activeSlideIndex < totalSlides - 1 ? activeSlideIndex + 1 : 0);
+    setIndex(activeSlideIndex + 1);
   }, [activeSlideIndex, totalSlides, setIndex]);
 
   const handlePrev = useCallback(() => {
+    if (activeSlideIndex <= 0) return;
     try {
       if (navigator.vibrate) navigator.vibrate(10);
     } catch {
       // ignore
     }
-    setIndex(activeSlideIndex > 0 ? activeSlideIndex - 1 : totalSlides - 1);
-  }, [activeSlideIndex, totalSlides, setIndex]);
+    setIndex(activeSlideIndex - 1);
+  }, [activeSlideIndex, setIndex]);
 
   // Toggle between Normal Portrait View (0°) and Landscape Widescreen Angle View (90°)
   // Prevents upside-down 180° rotation on any device and respects user manual toggle
@@ -393,7 +396,9 @@ export function PresentationLightroomModal({
 
     // Apply interactive drag resistance only when in normal orientation
     if (Math.abs(deltaX) > Math.abs(deltaY) * 1.2 && totalSlides > 1 && rotation === 0) {
-      setTouchOffset(deltaX * 0.35);
+      const isPastBoundary = (activeSlideIndex === 0 && deltaX > 0) || (activeSlideIndex >= totalSlides - 1 && deltaX < 0);
+      const resistanceFactor = isPastBoundary ? 0.12 : 0.35;
+      setTouchOffset(deltaX * resistanceFactor);
     }
   };
 
@@ -913,27 +918,31 @@ export function PresentationLightroomModal({
             {/* Desktop Hover Floating Chevrons (Vertically centered) */}
             {totalSlides > 1 && !isZoomed && isSlideLoaded && (
               <>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePrev();
-                  }}
-                  title="Previous Slide"
-                  className="absolute left-2.5 sm:left-4 top-1/2 -translate-y-1/2 z-20 size-8.5 sm:size-10 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-md text-white border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95 shadow-xl hidden sm:flex pointer-events-auto cursor-pointer"
-                >
-                  <ChevronLeft className="size-4.5 sm:size-5" />
-                </button>
+                {activeSlideIndex > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrev();
+                    }}
+                    title="Previous Slide"
+                    className="absolute left-2.5 sm:left-4 top-1/2 -translate-y-1/2 z-20 size-8.5 sm:size-10 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-md text-white border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95 shadow-xl hidden sm:flex pointer-events-auto cursor-pointer"
+                  >
+                    <ChevronLeft className="size-4.5 sm:size-5" />
+                  </button>
+                )}
 
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleNext();
-                  }}
-                  title="Next Slide"
-                  className="absolute right-2.5 sm:right-4 top-1/2 -translate-y-1/2 z-20 size-8.5 sm:size-10 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-md text-white border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95 shadow-xl hidden sm:flex pointer-events-auto cursor-pointer"
-                >
-                  <ChevronRight className="size-4.5 sm:size-5" />
-                </button>
+                {activeSlideIndex < totalSlides - 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleNext();
+                    }}
+                    title="Next Slide"
+                    className="absolute right-2.5 sm:right-4 top-1/2 -translate-y-1/2 z-20 size-8.5 sm:size-10 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-md text-white border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95 shadow-xl hidden sm:flex pointer-events-auto cursor-pointer"
+                  >
+                    <ChevronRight className="size-4.5 sm:size-5" />
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -1109,10 +1118,15 @@ export function PresentationLightroomModal({
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 pl-0.5 sm:pl-1.5">
           <button
             onClick={handlePrev}
+            disabled={activeSlideIndex <= 0}
             title="Previous Slide"
+            aria-label="Previous Slide"
             className={cn(
-              "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0 pointer-events-auto cursor-pointer",
-              isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]"
+              "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0",
+              isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]",
+              activeSlideIndex <= 0
+                ? "invisible opacity-0 pointer-events-none"
+                : "pointer-events-auto cursor-pointer"
             )}
           >
             <ChevronLeft className={cn(isThinMobile ? "size-3" : isMobile ? "size-4" : "size-4.5")} />
@@ -1133,10 +1147,15 @@ export function PresentationLightroomModal({
 
           <button
             onClick={handleNext}
+            disabled={activeSlideIndex >= totalSlides - 1}
             title="Next Slide"
+            aria-label="Next Slide"
             className={cn(
-              "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0 pointer-events-auto cursor-pointer",
-              isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]"
+              "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0",
+              isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]",
+              activeSlideIndex >= totalSlides - 1
+                ? "invisible opacity-0 pointer-events-none"
+                : "pointer-events-auto cursor-pointer"
             )}
           >
             <ChevronRight className={cn(isThinMobile ? "size-3" : isMobile ? "size-4" : "size-4.5")} />
