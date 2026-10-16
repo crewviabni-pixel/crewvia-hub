@@ -473,16 +473,24 @@ export function PresentationLightroomModal({
   // Exact slide aspect ratio (defaults to standard 16:9 widescreen: 1.7778)
   const ratio = imgAspectRatio > 0 ? imgAspectRatio : 16 / 9;
 
-  // Optimal card dimensions bounded by ratio and available space:
-  // Mathematical guarantee: targetCardW / targetCardH matches ratio with 0px empty letterbox space
-  const targetCardW = Math.min(availW, Math.round(availH * ratio));
-  const targetCardH = Math.round(targetCardW / ratio);
+  // Best-fit 2D containment bounding box for ANY aspect ratio (widescreen, square, or portrait):
+  // Mathematical guarantee: fits 100% within available viewport budget while strictly matching slide ratio with 0px empty letterbox
+  let targetCardW = availW;
+  let targetCardH = Math.round(targetCardW / ratio);
+  if (targetCardH > availH) {
+    targetCardH = availH;
+    targetCardW = Math.round(targetCardH * ratio);
+  }
 
   // In rotated landscape mode (90° on portrait phone):
   // The phone is portrait, so the slide width runs along phone vertical axis (availH),
   // and the slide height runs along phone horizontal axis (availW).
-  const rotCardW = isRotatedLandscape ? Math.min(availH, Math.round(availW * ratio)) : 0;
-  const rotCardH = isRotatedLandscape ? Math.round(rotCardW / ratio) : 0;
+  let rotCardW = isRotatedLandscape ? availH : 0;
+  let rotCardH = isRotatedLandscape ? Math.round(rotCardW / ratio) : 0;
+  if (isRotatedLandscape && rotCardH > availW) {
+    rotCardH = availW;
+    rotCardW = Math.round(rotCardH * ratio);
+  }
 
   // Intelligent Lookahead Preloader for 30-60MB Multi-Slide Decks
   // Pre-caches Next (+1) and Prev (-1) slides in a sliding window so slide transitions are instantaneous
@@ -678,7 +686,7 @@ export function PresentationLightroomModal({
                 transformOrigin: "center center",
                 transition: "transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
               }}
-              className="rounded-[20px] sm:rounded-[24px] md:rounded-[28px] overflow-hidden shadow-2xl shadow-black/50 border border-white/25"
+              className="rounded-[16px] sm:rounded-[22px] md:rounded-[26px] overflow-hidden shadow-2xl shadow-black/50 border border-white/25 flex items-center justify-center bg-black/40"
             >
               {!isSlideLoaded && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 bg-slate-950/70 backdrop-blur-md select-none overflow-hidden min-w-[280px] min-h-[180px]">
@@ -713,6 +721,12 @@ export function PresentationLightroomModal({
                 src={currentSlide.preview_url}
                 alt={currentSlide.title || `Slide ${activeSlideIndex + 1}`}
                 draggable={false}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  display: "block",
+                }}
                 onLoad={(e) => {
                   const { naturalWidth, naturalHeight } = e.currentTarget;
                   if (naturalWidth && naturalHeight) {
@@ -723,7 +737,7 @@ export function PresentationLightroomModal({
                   setIsSlideLoaded(true);
                 }}
                 onError={() => setIsSlideLoaded(true)}
-                className={`block size-full object-cover rounded-[20px] sm:rounded-[24px] md:rounded-[28px] select-none pointer-events-none transition-opacity duration-300 ${
+                className={`block size-full object-contain rounded-[16px] sm:rounded-[22px] md:rounded-[26px] select-none pointer-events-none transition-opacity duration-300 ${
                   isSlideLoaded ? "opacity-100" : "opacity-0"
                 }`}
               />
@@ -748,7 +762,7 @@ export function PresentationLightroomModal({
                 : undefined,
             }}
             className={cn(
-              "relative flex items-center justify-center rounded-[18px] sm:rounded-[24px] md:rounded-[28px] overflow-hidden shadow-2xl shadow-black/50 border border-white/20 select-none transition-all duration-300 ease-out",
+              "relative flex items-center justify-center rounded-[16px] sm:rounded-[22px] md:rounded-[26px] overflow-hidden shadow-2xl shadow-black/50 border border-white/20 select-none transition-all duration-300 ease-out bg-black/40",
               isZoomed ? "overflow-auto cursor-zoom-out" : "cursor-zoom-in"
             )}
           >
@@ -758,7 +772,7 @@ export function PresentationLightroomModal({
                   width: `${targetCardW}px`,
                   height: `${targetCardH}px`,
                 }}
-                className="flex flex-col items-center justify-center p-6 bg-slate-950/70 backdrop-blur-md select-none overflow-hidden rounded-[18px] sm:rounded-[24px] md:rounded-[28px]"
+                className="flex flex-col items-center justify-center p-6 bg-slate-950/70 backdrop-blur-md select-none overflow-hidden rounded-[16px] sm:rounded-[22px] md:rounded-[26px]"
               >
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_50%,rgba(56,189,248,0.08),transparent_70%)] pointer-events-none" />
                 <div className="relative p-[1.5px] rounded-2xl overflow-hidden shadow-2xl shadow-cyan-950/40">
@@ -795,6 +809,7 @@ export function PresentationLightroomModal({
               style={{
                 width: "100%",
                 height: "100%",
+                objectFit: "contain",
                 display: "block",
               }}
               onLoad={(e) => {
@@ -808,7 +823,7 @@ export function PresentationLightroomModal({
               }}
               onError={() => setIsSlideLoaded(true)}
               className={cn(
-                "size-full object-cover rounded-[18px] sm:rounded-[24px] md:rounded-[28px] select-none pointer-events-none transition-opacity duration-300",
+                "size-full object-contain rounded-[16px] sm:rounded-[22px] md:rounded-[26px] select-none pointer-events-none transition-opacity duration-300",
                 isSlideLoaded ? "opacity-100" : "opacity-0 absolute"
               )}
             />
@@ -868,7 +883,7 @@ export function PresentationLightroomModal({
                 <img
                   src={slide.preview_url}
                   alt={`Slide ${sIdx + 1}`}
-                  className="size-full object-cover"
+                  className="size-full object-contain"
                 />
                 <span className="absolute bottom-1 right-1 px-1.5 py-0.2 rounded bg-black/80 text-[9px] font-mono font-bold text-white">
                   {sIdx + 1}
