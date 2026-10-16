@@ -971,9 +971,9 @@ export function PresentationLightroomModal({
         className={cn(
           "pointer-events-auto z-30 flex items-center rounded-full bg-white shadow-2xl shadow-black/25 border border-slate-200/90 text-slate-800 shrink-0 mb-0 transition-all select-none max-w-[calc(100vw-12px)] sm:max-w-none",
           isThinMobile
-            ? "h-[42px] px-2.5 gap-1"
+            ? "h-[42px] px-2 gap-1"
             : isMobile
-            ? "h-[50px] px-3.5 gap-1.5 sm:gap-2"
+            ? "h-[50px] px-2.5 sm:px-3 gap-1.5"
             : "h-[58px] px-4 gap-2.5"
         )}
       >
@@ -1097,17 +1097,14 @@ export function PresentationLightroomModal({
           </button>
         )}
 
-        {/* Subtle Vertical Divider separating Actions from Navigation */}
-        <div className="h-5 w-[1px] bg-slate-200/90 shrink-0 mx-0.5 sm:mx-1" />
-
-        {/* Slide Navigation Segment: < 1 / N > with perfectly balanced spacing */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        {/* Slide Navigation Segment: < 1 / N > */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 pl-0.5 sm:pl-1.5">
           <button
             onClick={handlePrev}
             title="Previous Slide"
             className={cn(
               "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0",
-              isThinMobile ? "size-[24px]" : isMobile ? "size-[34px]" : "size-[34px]"
+              isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]"
             )}
           >
             <ChevronLeft className={cn(isThinMobile ? "size-3" : isMobile ? "size-4" : "size-4.5")} />
@@ -1117,9 +1114,9 @@ export function PresentationLightroomModal({
             className={cn(
               "font-mono font-bold text-slate-800 whitespace-nowrap text-center select-none",
               isThinMobile
-                ? "text-[11px] min-w-[24px]"
+                ? "text-[11px] px-0.5 min-w-[24px]"
                 : isMobile
-                ? "text-[13px] px-1 min-w-[32px]"
+                ? "text-[13px] px-1 min-w-[34px]"
                 : "text-[14px] px-2 min-w-[42px]"
             )}
           >
@@ -1131,7 +1128,7 @@ export function PresentationLightroomModal({
             title="Next Slide"
             className={cn(
               "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0",
-              isThinMobile ? "size-[24px]" : isMobile ? "size-[34px]" : "size-[34px]"
+              isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]"
             )}
           >
             <ChevronRight className={cn(isThinMobile ? "size-3" : isMobile ? "size-4" : "size-4.5")} />
