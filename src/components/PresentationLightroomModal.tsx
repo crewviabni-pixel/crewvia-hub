@@ -526,11 +526,11 @@ export function PresentationLightroomModal({
   const isRotatedLandscape = rotation === 90;
   const isMobile = screenSize.w < 640;
   const isTablet = screenSize.w >= 640 && screenSize.w < 1024;
-  const isThinMobile = screenSize.w < 380;
+  const isThinMobile = screenSize.w < 340;
   const isShortScreen = screenSize.h < 550;
 
   // Fixed chrome vertical budget scaled by zoom compensation factor (only on desktop):
-  const vertChrome = isThinMobile ? 96 : isMobile || isShortScreen ? 112 : Math.round(170 * zoomScale);
+  const vertChrome = isThinMobile ? 100 : isMobile || isShortScreen ? 120 : Math.round(170 * zoomScale);
   const maxAvailableH = Math.max(140, screenSize.h - vertChrome);
 
   // Balanced target proportions (slide occupies ~96% width on thin mobile, ~94% on mobile, ~82% on tablet, ~65% on desktop):
@@ -613,7 +613,7 @@ export function PresentationLightroomModal({
       {/* TOP BAR: Title Pill + Controls (Likes/Views Capsule + Zoom + Close) */}
       <header
         style={{
-          height: isThinMobile ? "36px" : isMobile ? "40px" : `${Math.round(48 * zoomScale)}px`,
+          height: isMobile ? "44px" : `${Math.round(48 * zoomScale)}px`,
         }}
         className="w-full flex items-center justify-between pointer-events-none z-30 shrink-0 box-border gap-1.5 sm:gap-3"
       >
@@ -625,16 +625,13 @@ export function PresentationLightroomModal({
           }}
           className={cn(
             "pointer-events-auto inline-flex items-center rounded-full bg-white shadow-xl shadow-black/5 border border-slate-200/90 text-slate-900 transition-all select-none min-w-0 w-fit shrink",
-            isThinMobile
-              ? "h-[36px] gap-1.5 px-2.5 max-w-[calc(100vw-145px)]"
-              : "h-[40px] sm:h-[48px] gap-2 sm:gap-2.5 px-3 sm:px-4 max-w-[calc(100vw-180px)] sm:max-w-md"
+            isMobile
+              ? "h-[44px] gap-2 px-3 sm:px-3.5 max-w-[calc(100vw-190px)] sm:max-w-md"
+              : "h-[48px] gap-2.5 px-4 max-w-md"
           )}
         >
-          <span className="size-2 sm:size-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-400 shrink-0 animate-pulse" />
-          <span className={cn(
-            "font-semibold tracking-tight text-slate-800 truncate min-w-0 leading-none",
-            isThinMobile ? "text-[12px]" : "text-[13px] sm:text-[14px]"
-          )}>
+          <span className="size-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-400 shrink-0 animate-pulse" />
+          <span className="font-semibold tracking-tight text-slate-800 truncate min-w-0 leading-none text-[13.5px] sm:text-[14px]">
             {deck.title}
           </span>
           {deck.category && (
@@ -655,9 +652,9 @@ export function PresentationLightroomModal({
           {/* Social Engagement Capsule: Like Button & View Counter */}
           <div className={cn(
             "flex items-center rounded-full bg-white shadow-xl shadow-black/5 border border-slate-200/90 text-slate-800 select-none shrink-0 transition-all",
-            isThinMobile
-              ? "h-[36px] gap-1 px-2"
-              : "h-[40px] sm:h-[48px] gap-1.5 sm:gap-2 px-2.5 sm:px-3.5"
+            isMobile
+              ? "h-[44px] gap-1.5 px-3"
+              : "h-[48px] gap-2 px-3.5"
           )}>
             {/* Interactive Like Button */}
             <button
@@ -667,8 +664,7 @@ export function PresentationLightroomModal({
             >
               <Heart
                 className={cn(
-                  "transition-all duration-200",
-                  isThinMobile ? "size-3" : "size-3.5 sm:size-4",
+                  "transition-all duration-200 size-4",
                   isLiked
                     ? "fill-rose-500 text-rose-500 scale-110 drop-shadow-sm"
                     : "text-slate-500 group-hover/like:text-rose-500 group-hover/like:scale-105"
@@ -676,8 +672,7 @@ export function PresentationLightroomModal({
               />
               <span
                 className={cn(
-                  "font-bold tracking-tight transition-colors",
-                  isThinMobile ? "text-[11px]" : "text-[12px] sm:text-[13px]",
+                  "font-bold tracking-tight transition-colors text-[13px]",
                   isLiked ? "text-rose-600" : "text-slate-700 group-hover/like:text-rose-600"
                 )}
               >
@@ -686,18 +681,15 @@ export function PresentationLightroomModal({
             </button>
 
             {/* Divider */}
-            <span className="h-3 w-[1px] bg-slate-200 mx-0.5" />
+            <span className="h-3.5 w-[1px] bg-slate-200 mx-0.5" />
 
             {/* View Counter */}
             <div
               title={`${viewCount} total presentation views`}
               className="flex items-center gap-1 text-slate-500 select-none"
             >
-              <Eye className={cn("text-slate-400 shrink-0", isThinMobile ? "size-3" : "size-3.5")} />
-              <span className={cn(
-                "font-medium text-slate-600 font-mono",
-                isThinMobile ? "text-[11px]" : "text-[12px] sm:text-[13px]"
-              )}>
+              <Eye className="text-slate-400 shrink-0 size-4" />
+              <span className="font-medium text-slate-600 font-mono text-[13px]">
                 {formatCompactNumber(viewCount)}
               </span>
             </div>
@@ -723,10 +715,10 @@ export function PresentationLightroomModal({
             title="Close Preview (Esc or Swipe down)"
             className={cn(
               "rounded-full bg-[#0f172a] hover:bg-black active:scale-95 text-white flex items-center justify-center transition-all shadow-xl border border-white/10 shrink-0",
-              isThinMobile ? "size-[36px]" : "size-[40px] sm:size-[48px]"
+              isMobile ? "size-[44px]" : "size-[48px]"
             )}
           >
-            <X className={cn(isThinMobile ? "size-4" : "size-4.5 sm:size-5")} />
+            <X className="size-5" />
           </button>
         </div>
       </header>
@@ -981,7 +973,7 @@ export function PresentationLightroomModal({
           isThinMobile
             ? "h-[42px] px-2 gap-1"
             : isMobile
-            ? "h-[48px] px-2.5 gap-1.5"
+            ? "h-[50px] px-2.5 sm:px-3 gap-1.5"
             : "h-[58px] px-4 gap-2.5"
         )}
       >
@@ -991,13 +983,13 @@ export function PresentationLightroomModal({
           title="Share presentation"
           className={cn(
             "rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 hover:text-black transition-all active:scale-95 shrink-0",
-            isThinMobile ? "size-[28px]" : isMobile ? "size-[34px]" : "size-[42px]"
+            isThinMobile ? "size-[28px]" : isMobile ? "size-[38px]" : "size-[42px]"
           )}
         >
           {isShareCopied ? (
-            <Check className={cn(isThinMobile ? "size-3.5" : isMobile ? "size-4" : "size-5", "text-emerald-600")} />
+            <Check className={cn(isThinMobile ? "size-3.5" : isMobile ? "size-[18px]" : "size-5", "text-emerald-600")} />
           ) : (
-            <Share2 className={cn(isThinMobile ? "size-3.5" : isMobile ? "size-4" : "size-5")} />
+            <Share2 className={cn(isThinMobile ? "size-3.5" : isMobile ? "size-[18px]" : "size-5")} />
           )}
         </button>
 
@@ -1007,10 +999,10 @@ export function PresentationLightroomModal({
           title={deck.pdf_url ? "Download presentation PDF" : "Download slide image"}
           className={cn(
             "rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 hover:text-black transition-all active:scale-95 shrink-0",
-            isThinMobile ? "size-[28px]" : isMobile ? "size-[34px]" : "size-[42px]"
+            isThinMobile ? "size-[28px]" : isMobile ? "size-[38px]" : "size-[42px]"
           )}
         >
-          <Download className={cn(isThinMobile ? "size-3.5" : isMobile ? "size-4" : "size-5")} />
+          <Download className={cn(isThinMobile ? "size-3.5" : isMobile ? "size-[18px]" : "size-5")} />
         </button>
 
         {/* Rotate / Landscape Orientation Toggle Button */}
@@ -1023,7 +1015,7 @@ export function PresentationLightroomModal({
           }
           className={cn(
             "rounded-full flex items-center justify-center transition-all active:scale-95 shrink-0",
-            isThinMobile ? "size-[28px]" : isMobile ? "size-[34px]" : "size-[42px]",
+            isThinMobile ? "size-[28px]" : isMobile ? "size-[38px]" : "size-[42px]",
             rotation === 90
               ? "bg-slate-900 text-white font-bold ring-2 ring-primary/40 shadow-sm"
               : "hover:bg-slate-100 text-slate-700 hover:text-black"
@@ -1032,7 +1024,7 @@ export function PresentationLightroomModal({
           <ScreenRotateIcon
             className={cn(
               "transition-transform duration-300",
-              isThinMobile ? "size-3.5" : isMobile ? "size-4" : "size-5",
+              isThinMobile ? "size-3.5" : isMobile ? "size-[18px]" : "size-5",
               rotation === 90 ? "rotate-90 text-cyan-300" : ""
             )}
           />
@@ -1077,7 +1069,7 @@ export function PresentationLightroomModal({
                 isThinMobile
                   ? "h-[28px] px-2.5 text-[11px] gap-1"
                   : isMobile
-                  ? "h-[34px] px-3.5 text-[12px] gap-1.5"
+                  ? "h-[38px] px-3.5 text-[13px] gap-1.5"
                   : "h-[42px] px-5 text-[14px] gap-2"
               )}
             >
@@ -1096,26 +1088,26 @@ export function PresentationLightroomModal({
               isThinMobile
                 ? "h-[28px] px-2.5 text-[11px] gap-1"
                 : isMobile
-                ? "h-[34px] px-3.5 text-[12.5px] gap-1.5"
+                ? "h-[38px] px-3 sm:px-3.5 text-[13px] gap-1.5"
                 : "h-[42px] px-5 text-[14px] gap-2"
             )}
           >
-            <span>{isThinMobile ? "Book" : "Book a call"}</span>
-            <ArrowUpRight className={cn(isThinMobile ? "size-3" : isMobile ? "size-3.5" : "size-4.5")} />
+            <span>{isMobile ? "Book" : "Book a call"}</span>
+            <ArrowUpRight className={cn(isThinMobile ? "size-3" : isMobile ? "size-4" : "size-4.5")} />
           </button>
         )}
 
         {/* Slide Navigation Segment: < 1 / N > */}
-        <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0 pl-0 sm:pl-1.5">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 pl-0.5 sm:pl-1.5">
           <button
             onClick={handlePrev}
             title="Previous Slide"
             className={cn(
               "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0",
-              isThinMobile ? "size-[24px]" : isMobile ? "size-[28px]" : "size-[34px]"
+              isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]"
             )}
           >
-            <ChevronLeft className={cn(isThinMobile ? "size-3" : isMobile ? "size-3.5" : "size-4.5")} />
+            <ChevronLeft className={cn(isThinMobile ? "size-3" : isMobile ? "size-4" : "size-4.5")} />
           </button>
 
           <span
@@ -1124,7 +1116,7 @@ export function PresentationLightroomModal({
               isThinMobile
                 ? "text-[11px] px-0.5 min-w-[24px]"
                 : isMobile
-                ? "text-[12px] px-1 min-w-[32px]"
+                ? "text-[13px] px-1 min-w-[34px]"
                 : "text-[14px] px-2 min-w-[42px]"
             )}
           >
@@ -1136,10 +1128,10 @@ export function PresentationLightroomModal({
             title="Next Slide"
             className={cn(
               "rounded-full hover:bg-slate-100 text-slate-700 hover:text-black flex items-center justify-center transition-all active:scale-95 shrink-0",
-              isThinMobile ? "size-[24px]" : isMobile ? "size-[28px]" : "size-[34px]"
+              isThinMobile ? "size-[24px]" : isMobile ? "size-[32px]" : "size-[34px]"
             )}
           >
-            <ChevronRight className={cn(isThinMobile ? "size-3" : isMobile ? "size-3.5" : "size-4.5")} />
+            <ChevronRight className={cn(isThinMobile ? "size-3" : isMobile ? "size-4" : "size-4.5")} />
           </button>
         </div>
       </nav>

@@ -632,7 +632,7 @@ function PublicPortfolioShowcasePage() {
       }
 
       const timeSinceLastMove = performance.now() - lastPointerTimeRef.current;
-      if (timeSinceLastMove > 80 || dragDistanceRef.current < 6) {
+      if (timeSinceLastMove > 80 || dragDistanceRef.current < 16) {
         velocityRef.current = { vx: 0, vy: 0 };
         checkGridOriginSync();
       } else {
@@ -767,11 +767,11 @@ function PublicPortfolioShowcasePage() {
     const minRow = Math.floor((-gridOrigin.y - bufferY) / cellH) - 1 - extraRowsTop;
     const maxRow = Math.ceil((viewport.h - gridOrigin.y + bufferY) / cellH) + 1 + extraRowsBottom;
 
-    // Core interactive zone boundaries (immediate viewport + 1.2 cells buffer)
+    // Core interactive zone boundaries (immediate viewport + generous buffer)
     const viewCenterX = -gridOrigin.x + viewport.w / 2;
     const viewCenterY = -gridOrigin.y + viewport.h / 2;
-    const coreColRadius = viewport.w / cellW / 2 + 1.2;
-    const coreRowRadius = viewport.h / cellH / 2 + 1.2;
+    const coreColRadius = viewport.w / cellW / 2 + 2.5;
+    const coreRowRadius = viewport.h / cellH / 2 + 2.5;
 
     const tiles = [];
     const total = filteredItems.length;
@@ -960,7 +960,7 @@ function PublicPortfolioShowcasePage() {
                     dragDistanceRef={dragDistanceRef}
                   />
                 ) : (
-                  <PredictiveSkeletonCard deck={tile.deck} />
+                  <PredictiveSkeletonCard deck={tile.deck} onOpen={openDeckModal} />
                 )}
               </div>
             ))}
@@ -1224,15 +1224,20 @@ function PublicPortfolioShowcasePage() {
 // Zero hooks, zero network requests, zero overhead. Eliminates blank screens at 120 FPS.
 const PredictiveSkeletonCard = memo(function PredictiveSkeletonCard({
   deck,
+  onOpen,
 }: {
   deck: PortfolioItem;
+  onOpen?: (deck: PortfolioItem, initialSlide: number) => void;
 }) {
   return (
     <div
+      onClick={() => onOpen?.(deck, 0)}
       style={{
         isolation: "isolate",
       }}
-      className="group relative size-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-md shadow-slate-900/[0.03] border border-slate-200/80 bg-slate-900/90 select-none pointer-events-none transition-opacity duration-200"
+      className={`group relative size-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-md shadow-slate-900/[0.03] border border-slate-200/80 bg-slate-900/90 select-none transition-opacity duration-200 ${
+        onOpen ? "cursor-pointer pointer-events-auto" : "pointer-events-none"
+      }`}
     >
       {/* Ambient Subtle Shimmer Wave */}
       <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_25%,rgba(255,255,255,0.06)_50%,transparent_75%)] bg-[length:200%_100%] animate-shimmer pointer-events-none" />
@@ -1355,8 +1360,8 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
     await togglePortfolioLike(deck.id, nextLiked);
   };
 
-  const isSkeleton = deck.id.startsWith("skel-") || displaySlides.length === 0;
-  const showRealContent = !isSkeleton;
+  const isSkeleton = deck.id.startsWith("skel-");
+  const showRealContent = !isSkeleton && (displaySlides.length > 0 || Boolean(deck.cover_image_url));
 
   const handlePrevSlide = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1368,13 +1373,53 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
     setCurrentSlideIndex((prev) => (prev < totalSlides - 1 ? prev + 1 : 0));
   };
 
+  // Ultra-Accurate Single-Click & Touch-Tap Mechanism (0ms instant response)
+  const pointerDownPosRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const lastOpenTimeRef = useRef<number>(0);
+
+  const triggerOpen = useCallback(() => {
+    if (isSkeleton) return;
+    const now = performance.now();
+    // Prevent duplicate triggers if pointerup and synthetic click both fire within 350ms
+    if (now - lastOpenTimeRef.current < 350) return;
+    lastOpenTimeRef.current = now;
+
+    setViewCount((prev) => prev + 1);
+    onOpen(deck, currentSlideIndex);
+  }, [isSkeleton, deck, currentSlideIndex, onOpen]);
+
+  const handleCardPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    pointerDownPosRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      time: performance.now(),
+    };
+  };
+
+  const handleCardPointerUp = (e: React.PointerEvent) => {
+    if (!pointerDownPosRef.current) return;
+    const start = pointerDownPosRef.current;
+    pointerDownPosRef.current = null;
+
+    const dx = Math.abs(e.clientX - start.x);
+    const dy = Math.abs(e.clientY - start.y);
+    const dist = Math.hypot(dx, dy);
+    const dt = performance.now() - start.time;
+
+    // A deliberate single tap or mouse click has < 16px displacement and < 500ms press duration
+    if (dist < 16 && dt < 500) {
+      triggerOpen();
+    }
+  };
+
   // Card Tap / Click: Open the preview modal INSTANTLY (0ms latency)
   const handleCardClick = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (isSkeleton) return;
-    if (!dragDistanceRef.current || dragDistanceRef.current < 6) {
-      setViewCount((prev) => prev + 1);
-      onOpen(deck, currentSlideIndex);
+    const dist = dragDistanceRef.current || 0;
+    if (dist < 16) {
+      triggerOpen();
     }
   };
 
@@ -1388,6 +1433,8 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
         setIsHovered(false);
         setCurrentSlideIndex(0);
       }}
+      onPointerDown={handleCardPointerDown}
+      onPointerUp={handleCardPointerUp}
       onClick={handleCardClick}
       style={{
         isolation: "isolate",
@@ -1537,8 +1584,11 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
       {/* STATE 3: DARK FADE BOTTOM DOCK ON HOVER (NO WHITE BLUR, 4 DATA POINTS ONLY) */}
       {showRealContent && isSeen && (
         <div
-          className="absolute bottom-0 inset-x-0 z-20 pt-12 pb-3 px-3 sm:px-4 bg-gradient-to-t from-slate-950/95 via-slate-950/65 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto"
-          onClick={(e) => e.stopPropagation()}
+          className="absolute bottom-0 inset-x-0 z-20 pt-12 pb-3 px-3 sm:px-4 bg-gradient-to-t from-slate-950/95 via-slate-950/65 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            triggerOpen();
+          }}
         >
           {/* Left Group: Copy link, Views count, Likes count */}
           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1589,7 +1639,7 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleCardClick();
+              triggerOpen();
             }}
             title="Open presentation deck"
             className="size-8 sm:size-8.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all shrink-0"
