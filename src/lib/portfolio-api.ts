@@ -412,7 +412,7 @@ export async function createPortfolioItem(
     if (
       payload.slides &&
       payload.slides.length > 0 &&
-      payload.slides[0].preview_url &&
+      payload.slides[0]?.preview_url &&
       !payload.slides[0].preview_url.toLowerCase().endsWith(".pdf")
     ) {
       coverUrl = payload.slides[0].preview_url;
@@ -574,10 +574,21 @@ export async function togglePortfolioFeatured(id: string, featured: boolean): Pr
   await updatePortfolioItem(id, { featured });
 }
 
+const SESSION_VIEWED_DECKS = new Set<string>();
+
 /**
- * Increment view count
+ * Increment view count (Guaranteed once per deck per user session)
  */
 export async function incrementPortfolioViews(id: string): Promise<number> {
+  if (!id) return 0;
+
+  // Deduplicate: A client viewing the same presentation in the same session only counts once
+  if (SESSION_VIEWED_DECKS.has(id)) {
+    const existing = await fetchPortfolioItemById(id);
+    return existing?.view_count || 0;
+  }
+  SESSION_VIEWED_DECKS.add(id);
+
   try {
     await (supabase as any).rpc("increment_portfolio_views", { p_id: id });
   } catch {
@@ -594,7 +605,8 @@ export async function incrementPortfolioViews(id: string): Promise<number> {
     await savePortfolioItemToStorage(updated);
     const all = await loadPortfolioItemsFromStorage();
     syncPortfolioToPublicCloud(all).catch(() => {});
-    notifyPortfolioTabsChanged();
+    // NOTE: Intentionally do NOT call notifyPortfolioTabsChanged() here
+    // to prevent causing a recursive query invalidation / re-fetch loop on active viewers
   }
   return nextCount;
 }

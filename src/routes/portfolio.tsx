@@ -63,6 +63,13 @@ export const Route = createFileRoute("/portfolio")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
+    links: [
+      { rel: "icon", href: "/favicon.ico", sizes: "any" },
+      { rel: "icon", href: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { rel: "icon", href: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+      { rel: "shortcut icon", href: "/favicon.ico" },
+    ],
   }),
   component: PublicPortfolioShowcasePage,
 });
@@ -331,14 +338,17 @@ function PublicPortfolioShowcasePage() {
     return unsubscribe;
   }, [queryClient]);
 
-  // Handle direct deep-link parameter ?deck=<id>
+  // Handle direct deep-link parameter ?deck=<id> (strictly once per deep-link change)
+  const deepLinkTrackedRef = useRef<string | null>(null);
   useEffect(() => {
     if (search.deck && portfolioItems.length > 0) {
+      if (deepLinkTrackedRef.current === search.deck) return;
       const found = portfolioItems.find((item) => item.id === search.deck);
       if (found) {
+        deepLinkTrackedRef.current = search.deck;
         setActiveDeck(found);
         setActiveSlideIndex(0);
-        incrementPortfolioViews(found.id);
+        incrementPortfolioViews(found.id).catch(() => {});
         setSeenIds((prev) => new Set(prev).add(found.id));
       }
     }
@@ -361,6 +371,9 @@ function PublicPortfolioShowcasePage() {
 
   const openDeckModal = useCallback(
     (deck: PortfolioItem, initialSlideIndex = 0) => {
+      // Record so the deep-link effect doesn't re-trigger when URL updates
+      deepLinkTrackedRef.current = deck.id;
+
       // 1. FIRST PRIORITY: Instantly open preview modal on the current frame (0ms latency)
       const optimisticDeck = {
         ...deck,
@@ -378,26 +391,16 @@ function PublicPortfolioShowcasePage() {
         });
       } catch {}
 
-      // 3. Background asynchronous API persistence (runs in background without blocking modal)
+      // 3. Background asynchronous API persistence (runs once in background)
       setTimeout(() => {
         incrementPortfolioViews(deck.id).catch(() => {});
-        queryClient.setQueryData(
-          ["published-portfolio-showcase"],
-          (old: PortfolioItem[] | undefined) => {
-            if (!old) return old;
-            return old.map((item) =>
-              item.id === deck.id
-                ? { ...item, view_count: (item.view_count || 0) + 1 }
-                : item
-            );
-          }
-        );
       }, 0);
     },
-    [navigate, queryClient]
+    [navigate]
   );
 
   const closeDeckModal = useCallback(() => {
+    deepLinkTrackedRef.current = null;
     setActiveDeck(null);
     navigate({
       search: (prev: any) => {

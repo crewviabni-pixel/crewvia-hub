@@ -1,16 +1,6 @@
 # Crewvia CRM
 
-Build the complete production-ready small internal Lead Management CRM exactly to the provided requirements. Prioritize fast one-tap lead, call, payment, status, reminder and activity updates; persistent data and accurate analytics; no signup, login only with username crewviabni and password crewvia@2026. Enable Lovable Cloud first for the database/auth/server logic needed. Implement the full workflow, responsive Leads/Add Lead/Analytics/Quick Reminders & Daily Activity screens, Kanban reminders, filters, complete timelines/audit trail, tel and WhatsApp links, and all specified statuses/payment/call/reminder behaviors. Do not use fake static workflow behavior or hardcoded analytics.
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/daca34a5-10a0-4804-82b6-a03eb04eedec).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+Crewvia Lead Management CRM and Client Portfolio Showcase. Prioritizes fast one-tap lead, call, payment, status, reminder, and activity updates; persistent data and accurate analytics; responsive Leads, Add Lead, Analytics, Kanban Reminders & Daily Activity screens, client presentation showcases, and interactive lightbox preview.
 
 ## Development
 
