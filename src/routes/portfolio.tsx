@@ -1363,6 +1363,7 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
 
   const handleLikeToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     const nextLiked = !isLiked;
     setIsLiked(nextLiked);
     setLikeCount((prev) => Math.max(0, prev + (nextLiked ? 1 : -1)));
@@ -1399,6 +1400,10 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
 
   const handleCardPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("button, [data-card-action], a, input, select, textarea")) {
+      return;
+    }
     pointerDownPosRef.current = {
       x: e.clientX,
       y: e.clientY,
@@ -1408,6 +1413,11 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
 
   const handleCardPointerUp = (e: React.PointerEvent) => {
     if (!pointerDownPosRef.current) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("button, [data-card-action], a, input, select, textarea")) {
+      pointerDownPosRef.current = null;
+      return;
+    }
     const start = pointerDownPosRef.current;
     pointerDownPosRef.current = null;
 
@@ -1424,7 +1434,13 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
 
   // Card Tap / Click: Open the preview modal INSTANTLY (0ms latency)
   const handleCardClick = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+    if (e) {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("button, [data-card-action], a, input, select, textarea")) {
+        return;
+      }
+      e.stopPropagation();
+    }
     if (isSkeleton) return;
     const dist = dragDistanceRef.current || 0;
     if (dist < 16) {
@@ -1562,11 +1578,18 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
       {/* Top-Right Slide Progress Pill (Syncs with 1.5s auto-scroll) */}
       {showRealContent && totalSlides > 1 && (
         <div
+          data-card-action="true"
           className="absolute top-3.5 right-3.5 z-20 flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-950/70 backdrop-blur-md border border-white/20 text-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200"
           onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
         >
           <button
+            type="button"
+            data-card-action="true"
             onClick={handlePrevSlide}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
             disabled={currentSlideIndex <= 0}
             title="Previous slide"
             aria-label="Previous slide"
@@ -1583,7 +1606,11 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
             {currentSlideIndex + 1} / {totalSlides}
           </span>
           <button
+            type="button"
+            data-card-action="true"
             onClick={handleNextSlide}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
             disabled={currentSlideIndex >= totalSlides - 1}
             title="Next slide"
             aria-label="Next slide"
@@ -1616,19 +1643,25 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
       {/* STATE 3: DARK FADE BOTTOM DOCK ON HOVER (NO WHITE BLUR, 4 DATA POINTS ONLY) */}
       {showRealContent && isSeen && (
         <div
-          role="button"
-          tabIndex={0}
-          aria-label="Open presentation"
-          className="absolute bottom-0 inset-x-0 z-20 pt-12 pb-3 px-3 sm:px-4 bg-gradient-to-t from-slate-950/95 via-slate-950/65 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto cursor-pointer"
+          role="region"
+          aria-label="Presentation actions"
+          className="absolute bottom-0 inset-x-0 z-20 pt-12 pb-3 px-3 sm:px-4 bg-gradient-to-t from-slate-950/95 via-slate-950/65 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto"
           onClick={(e) => {
-            e.stopPropagation();
-            triggerOpen();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
+            if (e.target === e.currentTarget) {
               e.stopPropagation();
               triggerOpen();
+            }
+          }}
+          onPointerDown={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("button, [data-card-action], a")) {
+              e.stopPropagation();
+            }
+          }}
+          onPointerUp={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("button, [data-card-action], a")) {
+              e.stopPropagation();
             }
           }}
         >
@@ -1636,7 +1669,14 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
           <div className="flex items-center gap-1.5 sm:gap-2">
             {/* 1. Copy Link Icon Button */}
             <button
-              onClick={(e) => onShare(deck, e)}
+              type="button"
+              data-card-action="true"
+              onClick={(e) => {
+                e.stopPropagation();
+                onShare(deck, e);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
               title={isCopied ? "Link copied!" : "Copy presentation link"}
               className="size-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-sm pointer-events-auto cursor-pointer"
             >
@@ -1658,7 +1698,11 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
 
             {/* 3. Like Button & Count Pill */}
             <button
+              type="button"
+              data-card-action="true"
               onClick={handleLikeToggle}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
               title={isLiked ? "Unlike presentation" : "Like presentation"}
               className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] font-semibold transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-sm select-none pointer-events-auto cursor-pointer",
@@ -1679,6 +1723,7 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
 
           {/* Right Group: Circular Open Deck Button with Upward Arrow */}
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               triggerOpen();
