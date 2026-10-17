@@ -559,7 +559,7 @@ function PublicPortfolioShowcasePage() {
     const target = e.target as HTMLElement;
     if (
       target.closest(
-        "button, a, input, select, textarea, [role='button'], nav, header, [role='dialog'], [data-modal='true']"
+        "button, a, input, select, textarea, [data-card-action], nav, header, [role='dialog'], [data-modal='true']"
       )
     ) {
       return;
@@ -1238,11 +1238,11 @@ const PredictiveSkeletonCard = memo(function PredictiveSkeletonCard({
           onOpen?.(deck, 0);
         }
       }}
-      role="button"
       tabIndex={0}
       aria-label={`Open presentation preview: ${deck.title}`}
       style={{
         isolation: "isolate",
+        touchAction: "none",
       }}
       className={`group relative size-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-md shadow-slate-900/[0.03] border border-slate-200/80 bg-slate-900/90 select-none transition-opacity duration-200 ${
         onOpen ? "cursor-pointer pointer-events-auto" : "pointer-events-none"
@@ -1467,11 +1467,11 @@ const InfinitePresentationCard = memo(function InfinitePresentationCard({
           triggerOpen();
         }
       }}
-      role="button"
       tabIndex={isSkeleton ? -1 : 0}
       aria-label={`Open presentation: ${deck.title}`}
       style={{
         isolation: "isolate",
+        touchAction: "none",
         WebkitMaskImage: "-webkit-radial-gradient(white, black)",
         maskImage: "radial-gradient(white, black)",
       }}
