@@ -74,8 +74,7 @@ export const Route = createFileRoute("/portfolio")({
   component: PublicPortfolioShowcasePage,
 });
 
-const CATEGORIES = ["All", ...PORTFOLIO_CATEGORIES] as const;
-type CategoryType = (typeof CATEGORIES)[number];
+type CategoryType = string;
 
 const CREWVIA_TEAM_WHATSAPP = "917223804653";
 
@@ -222,9 +221,9 @@ function PublicPortfolioShowcasePage() {
   const cellH = cardHeight + gapY;
 
   // Active Category filter
-  const [activeCategory, setActiveCategory] = useState<CategoryType>(() => {
+  const [activeCategory, setActiveCategory] = useState<string>(() => {
     if (search.cat) {
-      const match = CATEGORIES.find(
+      const match = PORTFOLIO_CATEGORIES.find(
         (c) => c.toLowerCase().replace(/\s+/g, "-") === search.cat?.toLowerCase()
       );
       if (match) return match;
@@ -354,6 +353,60 @@ function PublicPortfolioShowcasePage() {
     }
   }, [search.deck, portfolioItems]);
 
+  // Dynamically compute only categories that actually contain at least 1 project
+  const availableCategories = useMemo(() => {
+    const sourceDecks =
+      portfolioItems.length > 0
+        ? portfolioItems
+        : isLoading
+        ? SKELETON_PLACEHOLDER_DECKS
+        : [];
+
+    const categoryCounts = new Map<string, number>();
+    for (const deck of sourceDecks) {
+      const cat = deck.category?.trim();
+      if (cat) {
+        // Find existing match in PORTFOLIO_CATEGORIES (case-insensitive) for canonical naming
+        const canonical =
+          PORTFOLIO_CATEGORIES.find((c) => c.toLowerCase() === cat.toLowerCase()) || cat;
+        categoryCounts.set(canonical, (categoryCounts.get(canonical) || 0) + 1);
+      }
+    }
+
+    // Preserve standard PORTFOLIO_CATEGORIES ordering for known categories with projects (> 0)
+    const activeKnown = PORTFOLIO_CATEGORIES.filter(
+      (cat) => (categoryCounts.get(cat) || 0) > 0
+    );
+
+    // Append any custom categories that also have projects
+    const extraCategories: string[] = [];
+    for (const [catName, count] of categoryCounts.entries()) {
+      if (count > 0 && !activeKnown.some((k) => k.toLowerCase() === catName.toLowerCase())) {
+        extraCategories.push(catName);
+      }
+    }
+
+    return ["All", ...activeKnown, ...extraCategories];
+  }, [portfolioItems, isLoading]);
+
+  // If the active category becomes empty (e.g. project deleted/re-categorized or invalid URL param), reset to "All"
+  useEffect(() => {
+    if (activeCategory === "All") return;
+    const isValid = availableCategories.some(
+      (c) => c.toLowerCase() === activeCategory.toLowerCase()
+    );
+    if (!isValid && !isLoading) {
+      setActiveCategory("All");
+      navigate({
+        search: (prev: any) => {
+          const { cat, ...rest } = prev || {};
+          return rest;
+        },
+        replace: true,
+      });
+    }
+  }, [availableCategories, activeCategory, isLoading, navigate]);
+
   // Filter items by category (smoothly falls back to rich placeholder canvas while initial query resolves)
   const filteredItems = useMemo(() => {
     const sourceItems =
@@ -475,7 +528,7 @@ function PublicPortfolioShowcasePage() {
     window.open(`https://wa.me/${CREWVIA_TEAM_WHATSAPP}?text=${encodeURIComponent(text)}`, "_blank");
   };
 
-  const handleCategorySelect = (category: CategoryType) => {
+  const handleCategorySelect = (category: string) => {
     setActiveCategory(category);
     navigate({
       search: (prev: any) => {
@@ -968,28 +1021,30 @@ function PublicPortfolioShowcasePage() {
         </div>
       )}
 
-      {/* DESKTOP VIEW: CENTER BOTTOM CATEGORY SELECTOR (ZERO SCROLL, NO PROJECT COUNTS) */}
-      <div className="hidden sm:flex fixed bottom-5 sm:bottom-6 inset-x-0 justify-center items-center pointer-events-none z-30">
-        <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 px-2 h-11 rounded-full bg-white/90 hover:bg-white/95 backdrop-blur-2xl border border-slate-200/80 shadow-2xl shadow-slate-900/10 box-border select-none overflow-hidden scrollbar-none [&::-webkit-scrollbar]:hidden shrink-0 transition-all">
-          {CATEGORIES.map((cat) => {
-            const isSelected = activeCategory === cat;
+      {/* DESKTOP VIEW: CENTER BOTTOM CATEGORY SELECTOR (DYNAMIC: ONLY CATEGORIES WITH PROJECTS) */}
+      {availableCategories.length > 1 && (
+        <div className="hidden sm:flex fixed bottom-5 sm:bottom-6 inset-x-0 justify-center items-center pointer-events-none z-30">
+          <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 px-2 h-11 rounded-full bg-white/90 hover:bg-white/95 backdrop-blur-2xl border border-slate-200/80 shadow-2xl shadow-slate-900/10 box-border select-none overflow-hidden scrollbar-none [&::-webkit-scrollbar]:hidden shrink-0 transition-all">
+            {availableCategories.map((cat) => {
+              const isSelected = activeCategory.toLowerCase() === cat.toLowerCase();
 
-            return (
-              <button
-                key={cat}
-                onClick={() => handleCategorySelect(cat)}
-                className={`flex items-center justify-center px-3.5 sm:px-4 h-8 rounded-full text-xs font-semibold tracking-tight transition-all duration-200 shrink-0 select-none whitespace-nowrap pointer-events-auto cursor-pointer ${
-                  isSelected
-                    ? "bg-slate-950 text-white shadow-sm"
-                    : "text-slate-600 hover:text-slate-950 hover:bg-slate-100/80"
-                }`}
-              >
-                <span>{cat === "All" ? "All Works" : cat}</span>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={cat}
+                  onClick={() => handleCategorySelect(cat)}
+                  className={`flex items-center justify-center px-3.5 sm:px-4 h-8 rounded-full text-xs font-semibold tracking-tight transition-all duration-200 shrink-0 select-none whitespace-nowrap pointer-events-auto cursor-pointer ${
+                    isSelected
+                      ? "bg-slate-950 text-white shadow-sm"
+                      : "text-slate-600 hover:text-slate-950 hover:bg-slate-100/80"
+                  }`}
+                >
+                  <span>{cat === "All" ? "All Works" : cat}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* MOBILE VIEW ONLY: REVERSE DROPDOWN (OPENS UPWARD) + BOTTOM "BOOK CALL" CTA DOCK */}
       <div
@@ -997,7 +1052,7 @@ function PublicPortfolioShowcasePage() {
         className="sm:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-40 pointer-events-auto"
       >
         {/* REVERSE DROPDOWN POPOVER (OPENS UPWARDS FROM DOCK TOWARDS TOP) */}
-        {isCategoryMenuOpen && (
+        {isCategoryMenuOpen && availableCategories.length > 1 && (
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 w-60 rounded-2xl bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-2xl shadow-slate-900/20 p-2 animate-in fade-in slide-in-from-bottom-2 duration-200 ring-1 ring-slate-900/5 z-50">
             <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
               <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase">
@@ -1006,8 +1061,8 @@ function PublicPortfolioShowcasePage() {
             </div>
 
             <div className="py-1 space-y-0.5 max-h-60 overflow-y-auto">
-              {CATEGORIES.map((cat) => {
-                const isSelected = activeCategory === cat;
+              {availableCategories.map((cat) => {
+                const isSelected = activeCategory.toLowerCase() === cat.toLowerCase();
 
                 return (
                   <button
@@ -1041,27 +1096,31 @@ function PublicPortfolioShowcasePage() {
 
         {/* MOBILE DOCK BAR: Category Reverse Dropdown Button + Book Call CTA Button */}
         <div className="flex items-center gap-1.5 p-1.5 rounded-full bg-white/90 backdrop-blur-2xl border border-slate-200/90 shadow-2xl shadow-slate-900/15 ring-1 ring-slate-900/5">
-          {/* Category Trigger Button (Opens Reverse Dropdown Upward) */}
-          <button
-            onClick={() => setIsCategoryMenuOpen((prev) => !prev)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold tracking-tight transition-all duration-200 select-none pointer-events-auto cursor-pointer ${
-              isCategoryMenuOpen
-                ? "bg-slate-900 text-white shadow-md ring-1 ring-slate-900"
-                : "bg-slate-100/90 hover:bg-slate-200/90 text-slate-800"
-            }`}
-          >
-            <Layers className="size-3.5 text-primary shrink-0" />
-            <span className="truncate max-w-[105px]">
-              {activeCategory === "All" ? "Categories" : activeCategory}
-            </span>
-            <ChevronUp
-              className={`size-3.5 text-slate-500 transition-transform duration-200 shrink-0 ${
-                isCategoryMenuOpen ? "rotate-180 text-white" : ""
-              }`}
-            />
-          </button>
+          {/* Category Trigger Button (Only shown when multiple categories exist) */}
+          {availableCategories.length > 1 && (
+            <>
+              <button
+                onClick={() => setIsCategoryMenuOpen((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold tracking-tight transition-all duration-200 select-none pointer-events-auto cursor-pointer ${
+                  isCategoryMenuOpen
+                    ? "bg-slate-900 text-white shadow-md ring-1 ring-slate-900"
+                    : "bg-slate-100/90 hover:bg-slate-200/90 text-slate-800"
+                }`}
+              >
+                <Layers className="size-3.5 text-primary shrink-0" />
+                <span className="truncate max-w-[105px]">
+                  {activeCategory === "All" ? "Categories" : activeCategory}
+                </span>
+                <ChevronUp
+                  className={`size-3.5 text-slate-500 transition-transform duration-200 shrink-0 ${
+                    isCategoryMenuOpen ? "rotate-180 text-white" : ""
+                  }`}
+                />
+              </button>
 
-          <div className="h-5 w-px bg-slate-200" />
+              <div className="h-5 w-px bg-slate-200" />
+            </>
+          )}
 
           {/* Book Call Button in Bottom Dock (Mobile) */}
           <button
@@ -1172,7 +1231,10 @@ function PublicPortfolioShowcasePage() {
                   onChange={(e) => setBookingType(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-sm text-neutral-900 focus:outline-none focus:border-neutral-900 transition-colors"
                 >
-                  {PORTFOLIO_CATEGORIES.map((cat) => (
+                  {(availableCategories.filter((c) => c !== "All").length > 0
+                    ? availableCategories.filter((c) => c !== "All")
+                    : PORTFOLIO_CATEGORIES
+                  ).map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
